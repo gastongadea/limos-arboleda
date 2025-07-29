@@ -1,14 +1,16 @@
 {
   "name": "limos-arboleda",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Sistema de inscripción de comidas - Versión Frontend Only",
   "private": true,
   "dependencies": {
-    "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.4",
-    "@testing-library/react": "^16.3.0",
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.3.0",
     "@testing-library/user-event": "^13.5.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "googleapis": "^154.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-modal": "^3.16.1",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4"
   },
@@ -16,7 +18,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -35,5 +39,26 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "gh-pages": "^6.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "homepage": "https://gastongadea.github.io/limos-arboleda/",
+  "keywords": [
+    "comensales",
+    "comidas",
+    "inscripción",
+    "react",
+    "localstorage",
+    "github-pages"
+  ],
+  "author": "Gastón Gadea",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gastongadea/limos-arboleda.git"
   }
 }
