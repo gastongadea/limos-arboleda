@@ -36,6 +36,95 @@ class GoogleSheetsService {
     return { read: readConfigured, write: writeConfigured };
   }
 
+  // Verificar si Google Apps Script está funcionando
+  async testGoogleAppsScript() {
+    try {
+      if (!this.appsScriptUrl) {
+        return { working: false, error: 'URL no configurada' };
+      }
+
+      // Determinar si estamos en desarrollo o producción
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // En desarrollo: intentar proxy local primero
+      if (isDevelopment && isLocalhost) {
+        try {
+          const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
+          const proxyResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: this.appsScriptUrl,
+              data: {
+                action: 'testConnection',
+                sheetId: this.sheetId,
+                data: {}
+              }
+            })
+          });
+
+          if (proxyResponse.ok) {
+            const result = await proxyResponse.json();
+            return { working: true, data: result };
+          }
+        } catch (proxyError) {
+          console.log('Proxy local no disponible, intentando proxy de producción...');
+        }
+      }
+      
+      // En producción o si el proxy local falla: usar proxy de Vercel
+      try {
+        const vercelProxyUrl = '/api/proxy';
+        const vercelResponse = await fetch(vercelProxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'testConnection',
+            data: {
+              action: 'testConnection',
+              sheetId: this.sheetId,
+              data: {}
+            }
+          })
+        });
+
+        if (vercelResponse.ok) {
+          const result = await vercelResponse.json();
+          return { working: true, data: result };
+        }
+      } catch (vercelError) {
+        console.log('Proxy de producción no disponible, intentando llamada directa...');
+      }
+      
+      // Último recurso: llamar directamente
+      const response = await fetch(this.appsScriptUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'testConnection',
+          sheetId: this.sheetId,
+          data: {}
+        })
+      });
+
+      if (!response.ok) {
+        return { working: false, error: `HTTP ${response.status}` };
+      }
+
+      const result = await response.json();
+      return { working: true, data: result };
+    } catch (error) {
+      return { working: false, error: error.message };
+    }
+  }
+
   // Obtener token de acceso para Service Account
   async getAccessToken() {
     try {
@@ -77,32 +166,108 @@ class GoogleSheetsService {
 
   // Método alternativo: usar Google Apps Script como proxy
   async callGoogleAppsScript(action, data) {
+    // Determinar si estamos en desarrollo o producción (al inicio de la función)
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
     try {
       if (!this.appsScriptUrl) {
         throw new Error('Google Apps Script URL no configurada');
       }
 
-      // Usar proxy local directamente para evitar problemas CORS
-      console.log('🔄 Usando proxy local para Google Apps Script...');
+      console.log('🔄 Llamando a Google Apps Script...');
+      console.log('Action:', action);
+      console.log('Data:', data);
       
-      const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
-      const response = await fetch(proxyUrl, {
+      // En desarrollo: intentar proxy local primero
+      if (isDevelopment && isLocalhost) {
+        try {
+          console.log('🔄 Intentando proxy local...');
+          const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
+          const proxyResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: this.appsScriptUrl,
+              data: {
+                action,
+                sheetId: this.sheetId,
+                data
+              }
+            })
+          });
+
+          if (proxyResponse.ok) {
+            const result = await proxyResponse.json();
+            console.log('✅ Respuesta del proxy local:', result);
+            
+            if (result.success === false) {
+              throw new Error(`Error en Apps Script: ${result.error || 'Error desconocido'}`);
+            }
+            
+            return result;
+          }
+        } catch (proxyError) {
+          console.log('Proxy local no disponible, intentando proxy de producción...');
+        }
+      }
+      
+      // En producción o si el proxy local falla: usar proxy de Vercel
+      try {
+        console.log('🔄 Usando proxy de producción...');
+        const vercelProxyUrl = '/api/proxy';
+        const vercelResponse = await fetch(vercelProxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'write',
+            data: {
+              action,
+              sheetId: this.sheetId,
+              data
+            }
+          })
+        });
+
+        if (vercelResponse.ok) {
+          const result = await vercelResponse.json();
+          console.log('✅ Respuesta del proxy de producción:', result);
+          
+          if (result.success === false) {
+            throw new Error(`Error en Apps Script: ${result.error || 'Error desconocido'}`);
+          }
+          
+          return result;
+        }
+      } catch (vercelError) {
+        console.log('Proxy de producción no disponible, intentando llamada directa...');
+      }
+      
+      // Último recurso: llamar directamente a Google Apps Script
+      console.log('🔄 Intentando llamada directa a Google Apps Script...');
+      const response = await fetch(this.appsScriptUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url: this.appsScriptUrl,
-          data: {
-            action,
-            sheetId: this.sheetId,
-            data
-          }
+          action,
+          sheetId: this.sheetId,
+          data
         })
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error HTTP ${response.status}: ${errorText}`);
+      }
+
       const result = await response.json();
-      console.log('✅ Respuesta del proxy:', result);
+      console.log('✅ Respuesta directa de Google Apps Script:', result);
       
       // Verificar si la operación fue exitosa
       if (result.success === false) {
@@ -113,6 +278,16 @@ class GoogleSheetsService {
       
     } catch (error) {
       console.error('Error llamando Google Apps Script:', error);
+      
+      // Si hay error de CORS, sugerir usar el proxy
+      if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
+        if (isDevelopment && isLocalhost) {
+          console.warn('💡 Sugerencia: Ejecuta el proxy server con: node proxy-server.js');
+        } else {
+          console.warn('💡 Sugerencia: Verifica que el proxy de producción esté configurado correctamente');
+        }
+      }
+      
       throw error;
     }
   }
@@ -419,6 +594,15 @@ class GoogleSheetsService {
   // Guardar inscripción en Google Sheets
   async saveInscripcion(inscripcion) {
     try {
+      // Primero verificar si Google Apps Script está funcionando
+      const scriptTest = await this.testGoogleAppsScript();
+      
+      if (!scriptTest.working) {
+        console.warn('Google Apps Script no está funcionando, guardando solo localmente');
+        console.warn('Error:', scriptTest.error);
+        throw new Error(`Google Apps Script no disponible: ${scriptTest.error}`);
+      }
+
       // Obtener datos actuales de la planilla
       const sheetData = await this.getSheetData();
       

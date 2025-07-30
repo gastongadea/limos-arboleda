@@ -10,7 +10,7 @@ import GoogleSheetsDemo from './components/GoogleSheetsDemo';
 import SheetDiagnostic from './components/SheetDiagnostic';
 import SheetStructureValidator from './components/SheetStructureValidator';
 import SyncDebugger from './components/SyncDebugger';
-import EnvDebugger from './components/EnvDebugger';
+
 
 Modal.setAppElement('#root');
 
@@ -23,11 +23,10 @@ const opcionesAlmuerzo = [
   { valor: 'R', label: 'Reg' },
   { valor: 'N', label: 'No' },
   { valor: '12', label: '12' },
-  { valor: '12:30', label: '12:30' },
   { valor: 'V', label: 'Vian' },
   { valor: 'San', label: 'San' },
-  { valor: 'T', label: 'Tarde' },
-  { valor: 'RT', label: 'Reg Tarde' },
+  { valor: 'T', label: 'T' },
+  { valor: 'RT', label: 'Reg T' },
 ];
 
 const opcionesCena = [
@@ -36,8 +35,8 @@ const opcionesCena = [
   { valor: 'N', label: 'No' },
   { valor: 'V', label: 'Vian' },
   { valor: 'T', label: 'Tarde' },
-  { valor: 'RT', label: 'Reg Tarde' },
-  { valor: 'VRM', label: 'Vian Reg Mañana' },
+  { valor: 'RT', label: 'Reg T' },
+  { valor: 'VRM', label: 'Vian R Mañana' },
 ];
 
 // Constantes de configuración
@@ -416,15 +415,27 @@ function App() {
       return;
     }
     
-    setSeleccion((prev) => ({
-      ...prev,
-      [dia]: {
-        ...prev[dia],
-        [comida]: valor,
-      },
-    }));
+    // Si se presiona el botón ya seleccionado, borrar la selección
+    if (seleccion[dia]?.[comida] === valor) {
+      setSeleccion((prev) => ({
+        ...prev,
+        [dia]: {
+          ...prev[dia],
+          [comida]: '',
+        },
+      }));
+    } else {
+      // Si se presiona un botón diferente, cambiar la selección
+      setSeleccion((prev) => ({
+        ...prev,
+        [dia]: {
+          ...prev[dia],
+          [comida]: valor,
+        },
+      }));
+    }
     setTieneCambios(true);
-  }, [mostrarMensaje]);
+  }, [mostrarMensaje, seleccion]);
 
   const handleInputChange = useCallback((dia, comida, valor) => {
     // Validar que sea un número para Plan e Invitados
@@ -446,16 +457,7 @@ function App() {
     setTieneCambios(true);
   }, [iniciales, mostrarMensaje]);
 
-  const handleClear = useCallback((dia, comida) => {
-    setSeleccion((prev) => ({
-      ...prev,
-      [dia]: {
-        ...prev[dia],
-        [comida]: '',
-      },
-    }));
-    setTieneCambios(true);
-  }, []);
+
 
   const handleSubmit = useCallback(async (e) => {
     if (e) e.preventDefault();
@@ -499,8 +501,11 @@ function App() {
             // Guardar en Google Sheets si está configurado
             if (useGoogleSheets && googleSheetsService.isConfigured()) {
               try {
+                console.log(`💾 Guardando en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion}`);
                 await googleSheetsService.saveInscripcion(inscripcion);
+                console.log(`✅ Guardado exitosamente en Google Sheets: ${dia} ${comida}`);
               } catch (error) {
+                console.error(`❌ Error guardando en Google Sheets: ${dia} ${comida}`, error);
                 errores.push(`Error en ${dia} ${comida}: ${error.message}`);
               }
             }
@@ -653,35 +658,42 @@ function App() {
 
   const renderBotones = useCallback((opciones, dia, comida) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }}>
-      {opciones.map(op => (
-        <button
-          key={op.valor}
-          type="button"
-          style={{
-            padding: '6px 10px',
-            background: seleccion[dia]?.[comida] === op.valor ? '#1976d2' : '#eee',
-            color: seleccion[dia]?.[comida] === op.valor ? 'white' : 'black',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            cursor: 'pointer',
-            fontWeight: seleccion[dia]?.[comida] === op.valor ? 'bold' : 'normal',
-            transition: 'all 0.2s ease',
-          }}
-          onClick={() => handleChange(dia, comida, op.valor)}
-          onMouseEnter={(e) => {
-            if (seleccion[dia]?.[comida] !== op.valor) {
-              e.target.style.background = '#d0d0d0';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (seleccion[dia]?.[comida] !== op.valor) {
-              e.target.style.background = '#eee';
-            }
-          }}
-        >
-          {op.label}
-        </button>
-      ))}
+      {opciones.map(op => {
+        const isSelected = seleccion[dia]?.[comida] === op.valor;
+        return (
+          <button
+            key={op.valor}
+            type="button"
+            style={{
+              padding: '6px 10px',
+              background: isSelected ? '#1976d2' : '#f5f5f5',
+              color: isSelected ? 'white' : '#333',
+              border: `1px solid ${isSelected ? '#1976d2' : '#ddd'}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: isSelected ? 'bold' : 'normal',
+              transition: 'all 0.2s ease',
+              boxShadow: isSelected ? '0 2px 4px rgba(25, 118, 210, 0.2)' : 'none',
+            }}
+            onClick={() => handleChange(dia, comida, op.valor)}
+            onMouseEnter={(e) => {
+              if (!isSelected) {
+                e.target.style.background = '#e3f2fd';
+                e.target.style.borderColor = '#1976d2';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSelected) {
+                e.target.style.background = '#f5f5f5';
+                e.target.style.borderColor = '#ddd';
+              }
+            }}
+            title={isSelected ? 'Presiona para borrar' : `Seleccionar ${op.label}`}
+          >
+            {op.label}
+          </button>
+        );
+      })}
     </div>
   ), [seleccion, handleChange]);
 
@@ -764,6 +776,52 @@ function App() {
 
       <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
         <button
+          style={{ padding: '8px 16px', background: '#ff5722', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+          onClick={async () => {
+            try {
+              console.log('🔍 Iniciando diagnóstico de sincronización...');
+              
+              // Verificar configuración
+              const config = googleSheetsService.isConfigured();
+              console.log('📋 Configuración:', config);
+              
+              // Test de conexión a Google Sheets API
+              console.log('🌐 Probando conexión a Google Sheets API...');
+              try {
+                const connectionTest = await googleSheetsService.testConnection();
+                console.log('✅ Test de conexión a Google Sheets:', connectionTest);
+              } catch (error) {
+                console.error('❌ Error en conexión a Google Sheets:', error);
+              }
+              
+              // Test de Google Apps Script
+              console.log('📝 Probando Google Apps Script...');
+              try {
+                const scriptTest = await googleSheetsService.testGoogleAppsScript();
+                console.log('✅ Test de Google Apps Script:', scriptTest);
+                
+                if (!scriptTest.working) {
+                  console.warn('⚠️ Google Apps Script no está funcionando');
+                  console.warn('💡 Esto significa que solo se puede leer de Google Sheets, no escribir');
+                }
+              } catch (error) {
+                console.error('❌ Error en Google Apps Script:', error);
+              }
+              
+              // Mostrar resumen
+              const configStatus = googleSheetsService.getConnectionStatus();
+              console.log('📊 Estado general:', configStatus);
+              
+              mostrarMensaje('Diagnóstico completado. Revisa la consola para detalles.', 'success');
+            } catch (error) {
+              console.error('❌ Error en diagnóstico:', error);
+              mostrarMensaje(`Error en diagnóstico: ${error.message}`, 'error');
+            }
+          }}
+        >
+          🔍 Diagnóstico
+        </button>
+        <button
           style={{ padding: '8px 16px', background: '#888', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
           onClick={handleOpenConfig}
         >
@@ -771,7 +829,7 @@ function App() {
         </button>
       </div>
 
-      <h2 style={{ marginTop: '60px' }}>Anotarse a las comidas - Arboleda</h2>
+      <h2 style={{ marginTop: '60px' }}>Comidas de Arboleda</h2>
 
       <div style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, paddingBottom: 16, borderBottom: '2px solid #eee', marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 12 }}>
@@ -875,6 +933,41 @@ function App() {
           </div>
         )}
         
+        {/* Opción para deshabilitar Google Sheets temporalmente */}
+        {googleSheetsService.isConfigured() && (
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#1976d2',
+            marginBottom: '8px',
+            background: '#e3f2fd',
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #bbdefb',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>🔄 Google Sheets habilitado</span>
+            <button
+              onClick={() => {
+                setUseGoogleSheets(false);
+                mostrarMensaje('Google Sheets deshabilitado temporalmente. Los datos se guardarán solo localmente.', 'warning');
+              }}
+              style={{
+                padding: '4px 8px',
+                background: '#ff9800',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '10px'
+              }}
+            >
+              Deshabilitar
+            </button>
+          </div>
+        )}
+        
         {/* Estado de conexión (solo mostrar si hay problemas) */}
         {googleSheetsService.isConfigured() && googleSheetsService.getConnectionStatus().status !== 'connected' && (
           <div style={{ 
@@ -887,6 +980,63 @@ function App() {
             border: '1px solid #ffcdd2'
           }}>
             ❌ Error de conexión con Google Sheets
+          </div>
+        )}
+        
+        {/* Mostrar cuando Google Sheets está deshabilitado */}
+        {!useGoogleSheets && googleSheetsService.isConfigured() && (
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#ff9800',
+            marginBottom: '8px',
+            background: '#fff3e0',
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #ffcc02',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>⚠️ Google Sheets deshabilitado temporalmente</span>
+            <button
+              onClick={() => {
+                setUseGoogleSheets(true);
+                mostrarMensaje('Google Sheets habilitado nuevamente.', 'success');
+              }}
+              style={{
+                padding: '4px 8px',
+                background: '#4caf50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '10px'
+              }}
+            >
+              Habilitar
+            </button>
+          </div>
+        )}
+        
+        {/* Información sobre el proxy server */}
+        {googleSheetsService.isConfigured() && (
+          <div style={{ 
+            fontSize: '11px', 
+            color: '#666',
+            marginBottom: '8px',
+            background: '#f5f5f5',
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd'
+          }}>
+            <div style={{ marginBottom: '4px' }}>
+              <strong>💡 Solución para errores de CORS:</strong>
+            </div>
+            <div style={{ fontSize: '10px', lineHeight: '1.3' }}>
+              1. Abre una terminal en la carpeta del proyecto<br/>
+              2. Ejecuta: <code>node proxy-server.js</code><br/>
+              3. Mantén la terminal abierta mientras usas la app
+            </div>
           </div>
         )}
         
@@ -956,7 +1106,6 @@ function App() {
                     ) : (
                       renderBotones(opcionesAlmuerzo, dia, 'Almuerzo')
                     )}
-                    <button type="button" onClick={() => handleClear(dia, 'Almuerzo')} style={{ marginLeft: 8, background: '#eee', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', padding: '4px 10px' }}>Borrar</button>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', margin: '6px 0', background: esFinDeSemanaDia ? '#f0f0f0' : undefined }}>
                     <label style={{ minWidth: 80, marginRight: 8 }}>Cena: </label>
@@ -971,7 +1120,6 @@ function App() {
                     ) : (
                       renderBotones(opcionesCena, dia, 'Cena')
                     )}
-                    <button type="button" onClick={() => handleClear(dia, 'Cena')} style={{ marginLeft: 8, background: '#eee', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', padding: '4px 10px' }}>Borrar</button>
                   </div>
                 </div>
                 {mostrarLineaMes && <hr style={{ border: 0, borderTop: '2px solid #bbb', margin: '18px 0' }} />}
@@ -1226,11 +1374,7 @@ function App() {
         onClose={() => setShowSheetStructureValidator(false)} 
       />
 
-      {/* Componente de Debug de Variables de Entorno */}
-      <EnvDebugger 
-        isOpen={false} 
-        onClose={() => {}} 
-      />
+
     </div>
   );
 }

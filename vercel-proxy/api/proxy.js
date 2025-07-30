@@ -1,5 +1,5 @@
 // Proxy server para Vercel/Netlify
-// Maneja las peticiones a Google Sheets API
+// Maneja las peticiones a Google Sheets API y Google Apps Script
 
 export default async function handler(req, res) {
   // Configurar CORS
@@ -43,10 +43,37 @@ export default async function handler(req, res) {
             error: 'URL de Google Apps Script no configurada' 
           });
         }
+        
+        // Extraer los datos específicos de Google Apps Script
+        const { action: scriptAction, sheetId, data: scriptData } = data;
+        
         response = await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify({
+            action: scriptAction,
+            sheetId: sheetId || SHEET_ID,
+            data: scriptData
+          })
+        });
+        break;
+
+      case 'testConnection':
+        // Test de conexión a Google Apps Script
+        if (!APPS_SCRIPT_URL) {
+          return res.status(400).json({ 
+            error: 'URL de Google Apps Script no configurada' 
+          });
+        }
+        
+        response = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'testConnection',
+            sheetId: SHEET_ID,
+            data: {}
+          })
         });
         break;
 
