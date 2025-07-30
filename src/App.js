@@ -85,7 +85,7 @@ function App() {
   const [diasResumen, setDiasResumen] = useState([]);
   const [tieneCambios, setTieneCambios] = useState(false);
   const [showDataManager, setShowDataManager] = useState(false);
-  const [useGoogleSheets, setUseGoogleSheets] = useState(true); // Siempre activo
+
   
   // Estados de carga y sincronización
   const [isLoading, setIsLoading] = useState(false);
@@ -128,7 +128,7 @@ function App() {
   useEffect(() => {
     const cargarUsuarios = async () => {
       try {
-        if (useGoogleSheets && googleSheetsService.isConfigured()) {
+        if (googleSheetsService.isConfigured()) {
           const usuarios = await googleSheetsService.getUsers();
           if (usuarios.length > 0) {
             setUsuariosDinamicos(usuarios);
@@ -148,7 +148,7 @@ function App() {
     };
 
     cargarUsuarios();
-  }, [useGoogleSheets]);
+  }, []);
 
   // Auto-save cuando hay cambios
   useEffect(() => {
@@ -175,7 +175,7 @@ function App() {
       try {
         let nuevaSel = {};
         
-        if (useGoogleSheets && googleSheetsService.isConfigured()) {
+        if (googleSheetsService.isConfigured()) {
           // Cargar desde Google Sheets con timeout
           const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Timeout al cargar datos')), CONFIG.TIMEOUT_SYNC)
@@ -212,18 +212,15 @@ function App() {
         setSyncErrors(prev => [...prev, error.message]);
         
         // Fallback a localStorage si Google Sheets falla
-        if (useGoogleSheets) {
-          setUseGoogleSheets(false);
-          setMensaje('Error de sincronización. Cambiando a modo local.');
-          setMensajeTipo('warning');
-        }
+        setMensaje('Error de sincronización. Usando modo local.');
+        setMensajeTipo('warning');
       } finally {
         setIsLoading(false);
       }
     };
 
     loadUserData();
-  }, [iniciales, dias, useGoogleSheets]);
+  }, [iniciales, dias]);
 
   // Función para mostrar mensajes
   const mostrarMensaje = useCallback((texto, tipo = 'info', duracion = 5000) => {
@@ -265,7 +262,7 @@ function App() {
       });
 
       // 2. Si Google Sheets está configurado, también obtener datos de ahí
-      if (useGoogleSheets && googleSheetsService.isConfigured()) {
+      if (googleSheetsService.isConfigured()) {
         try {
           const sheetData = await googleSheetsService.getSheetData();
           
@@ -329,7 +326,7 @@ function App() {
       console.error('Error al calcular resumen:', error);
       mostrarMensaje('Error al calcular el resumen de comensales', 'error');
     }
-  }, [dias, mostrarMensaje, useGoogleSheets]);
+  }, [dias, mostrarMensaje]);
 
   // Función para detectar usuarios sin comidas hoy
   const detectarUsuariosSinComidasHoy = useCallback(async () => {
@@ -350,7 +347,7 @@ function App() {
       });
       
       // Si Google Sheets está configurado, también obtener datos de ahí
-      if (useGoogleSheets && googleSheetsService.isConfigured()) {
+      if (googleSheetsService.isConfigured()) {
         try {
           // Obtener datos de Google Sheets para hoy
           const sheetData = await googleSheetsService.getSheetData();
@@ -400,7 +397,7 @@ function App() {
     } catch (error) {
       console.error('Error al detectar usuarios sin comidas:', error);
     }
-  }, [usuariosDinamicos, useGoogleSheets]);
+  }, [usuariosDinamicos]);
 
   // Detectar usuarios sin comidas al cargar la aplicación
   useEffect(() => {
@@ -499,7 +496,7 @@ function App() {
             }
             
             // Guardar en Google Sheets si está configurado
-            if (useGoogleSheets && googleSheetsService.isConfigured()) {
+            if (googleSheetsService.isConfigured()) {
               try {
                 console.log(`💾 Guardando en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion}`);
                 await googleSheetsService.saveInscripcion(inscripcion);
@@ -514,7 +511,7 @@ function App() {
       }
 
       if (guardados > 0) {
-        const mensaje = useGoogleSheets && googleSheetsService.isConfigured() 
+        const mensaje = googleSheetsService.isConfigured() 
           ? `¡Inscripción guardada! ${guardados} registros guardados localmente y en Google Sheets.`
           : `¡Inscripción guardada! ${guardados} registros guardados localmente.`;
         
@@ -548,7 +545,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [iniciales, dias, seleccion, useGoogleSheets, mostrarMensaje]);
+  }, [iniciales, dias, seleccion, mostrarMensaje]);
 
   const handleCambioIniciales = useCallback((ini) => {
     // Si se presiona el botón ya seleccionado, deseleccionar
@@ -776,52 +773,6 @@ function App() {
 
       <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
         <button
-          style={{ padding: '8px 16px', background: '#ff5722', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
-          onClick={async () => {
-            try {
-              console.log('🔍 Iniciando diagnóstico de sincronización...');
-              
-              // Verificar configuración
-              const config = googleSheetsService.isConfigured();
-              console.log('📋 Configuración:', config);
-              
-              // Test de conexión a Google Sheets API
-              console.log('🌐 Probando conexión a Google Sheets API...');
-              try {
-                const connectionTest = await googleSheetsService.testConnection();
-                console.log('✅ Test de conexión a Google Sheets:', connectionTest);
-              } catch (error) {
-                console.error('❌ Error en conexión a Google Sheets:', error);
-              }
-              
-              // Test de Google Apps Script
-              console.log('📝 Probando Google Apps Script...');
-              try {
-                const scriptTest = await googleSheetsService.testGoogleAppsScript();
-                console.log('✅ Test de Google Apps Script:', scriptTest);
-                
-                if (!scriptTest.working) {
-                  console.warn('⚠️ Google Apps Script no está funcionando');
-                  console.warn('💡 Esto significa que solo se puede leer de Google Sheets, no escribir');
-                }
-              } catch (error) {
-                console.error('❌ Error en Google Apps Script:', error);
-              }
-              
-              // Mostrar resumen
-              const configStatus = googleSheetsService.getConnectionStatus();
-              console.log('📊 Estado general:', configStatus);
-              
-              mostrarMensaje('Diagnóstico completado. Revisa la consola para detalles.', 'success');
-            } catch (error) {
-              console.error('❌ Error en diagnóstico:', error);
-              mostrarMensaje(`Error en diagnóstico: ${error.message}`, 'error');
-            }
-          }}
-        >
-          🔍 Diagnóstico
-        </button>
-        <button
           style={{ padding: '8px 16px', background: '#888', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
           onClick={handleOpenConfig}
         >
@@ -933,90 +884,7 @@ function App() {
           </div>
         )}
         
-        {/* Opción para deshabilitar Google Sheets temporalmente */}
-        {googleSheetsService.isConfigured() && (
-          <div style={{ 
-            fontSize: '12px', 
-            color: '#1976d2',
-            marginBottom: '8px',
-            background: '#e3f2fd',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #bbdefb',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>🔄 Google Sheets habilitado</span>
-            <button
-              onClick={() => {
-                setUseGoogleSheets(false);
-                mostrarMensaje('Google Sheets deshabilitado temporalmente. Los datos se guardarán solo localmente.', 'warning');
-              }}
-              style={{
-                padding: '4px 8px',
-                background: '#ff9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '10px'
-              }}
-            >
-              Deshabilitar
-            </button>
-          </div>
-        )}
-        
-        {/* Estado de conexión (solo mostrar si hay problemas) */}
-        {googleSheetsService.isConfigured() && googleSheetsService.getConnectionStatus().status !== 'connected' && (
-          <div style={{ 
-            fontSize: '12px', 
-            color: '#f44336',
-            marginBottom: '8px',
-            background: '#ffebee',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ffcdd2'
-          }}>
-            ❌ Error de conexión con Google Sheets
-          </div>
-        )}
-        
-        {/* Mostrar cuando Google Sheets está deshabilitado */}
-        {!useGoogleSheets && googleSheetsService.isConfigured() && (
-          <div style={{ 
-            fontSize: '12px', 
-            color: '#ff9800',
-            marginBottom: '8px',
-            background: '#fff3e0',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ffcc02',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span>⚠️ Google Sheets deshabilitado temporalmente</span>
-            <button
-              onClick={() => {
-                setUseGoogleSheets(true);
-                mostrarMensaje('Google Sheets habilitado nuevamente.', 'success');
-              }}
-              style={{
-                padding: '4px 8px',
-                background: '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '10px'
-              }}
-            >
-              Habilitar
-            </button>
-          </div>
-        )}
+
         
         {/* Información sobre el proxy server */}
         {googleSheetsService.isConfigured() && (
@@ -1241,12 +1109,7 @@ function App() {
                 🎉 Demo
               </button>
               
-              <button
-                style={{ padding: '8px 16px', background: '#9c27b0', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
-                onClick={() => { setShowSheetDiagnostic(true); setShowConfig(false); }}
-              >
-                🔍 Diagnóstico
-              </button>
+
               
               <button
                 style={{ padding: '8px 16px', background: '#2196f3', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
@@ -1363,7 +1226,7 @@ function App() {
         onClose={() => setShowSyncDebugger(false)}
         syncStatus={syncStatus}
         syncErrors={syncErrors}
-        useGoogleSheets={useGoogleSheets}
+        useGoogleSheets={googleSheetsService.isConfigured()}
         iniciales={iniciales}
         seleccion={seleccion}
       />
