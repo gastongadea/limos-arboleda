@@ -886,27 +886,7 @@ function App() {
         
 
         
-        {/* Información sobre el proxy server */}
-        {googleSheetsService.isConfigured() && (
-          <div style={{ 
-            fontSize: '11px', 
-            color: '#666',
-            marginBottom: '8px',
-            background: '#f5f5f5',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ddd'
-          }}>
-            <div style={{ marginBottom: '4px' }}>
-              <strong>💡 Solución para errores de CORS:</strong>
-            </div>
-            <div style={{ fontSize: '10px', lineHeight: '1.3' }}>
-              1. Abre una terminal en la carpeta del proyecto<br/>
-              2. Ejecuta: <code>node proxy-server.js</code><br/>
-              3. Mantén la terminal abierta mientras usas la app
-            </div>
-          </div>
-        )}
+
         
         {/* Estado de sincronización */}
         {syncStatus && (
