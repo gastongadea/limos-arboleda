@@ -57,8 +57,8 @@ function deducirTipoUsuario(inicial) {
   return 'Residente';
 }
 
-function validarIniciales(iniciales) {
-  return inicialesLista.includes(iniciales);
+function validarIniciales(iniciales, usuariosLista = inicialesLista) {
+  return usuariosLista.includes(iniciales);
 }
 
 function validarOpcion(opcion, comida) {
@@ -103,6 +103,9 @@ function App() {
   const [showSheetStructureValidator, setShowSheetStructureValidator] = useState(false);
   const [showSyncDebugger, setShowSyncDebugger] = useState(false);
   const [usuariosSinComidasHoy, setUsuariosSinComidasHoy] = useState([]);
+  
+  // Estado para usuarios dinámicos desde Google Sheets
+  const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
 
   // Generar días (próximos 30 días desde hoy)
   useEffect(() => {
@@ -121,6 +124,32 @@ function App() {
     
     setDias(dias);
   }, []);
+
+  // Cargar usuarios dinámicamente desde Google Sheets
+  useEffect(() => {
+    const cargarUsuarios = async () => {
+      try {
+        if (useGoogleSheets && googleSheetsService.isConfigured()) {
+          const usuarios = await googleSheetsService.getUsers();
+          if (usuarios.length > 0) {
+            setUsuariosDinamicos(usuarios);
+          } else {
+            // Fallback a lista estática si no se obtienen usuarios
+            setUsuariosDinamicos(inicialesLista);
+          }
+        } else {
+          // Usar lista estática si Google Sheets no está configurado
+          setUsuariosDinamicos(inicialesLista);
+        }
+      } catch (error) {
+        console.error('Error al cargar usuarios:', error);
+        // Fallback a lista estática en caso de error
+        setUsuariosDinamicos(inicialesLista);
+      }
+    };
+
+    cargarUsuarios();
+  }, [useGoogleSheets]);
 
   // Auto-save cuando hay cambios
   useEffect(() => {
@@ -178,9 +207,6 @@ function App() {
         setSeleccion(nuevaSel);
         setTieneCambios(false);
         
-        // Detectar usuarios sin comidas hoy
-        detectarUsuariosSinComidasHoy();
-        
       } catch (error) {
         console.error('Error al cargar datos:', error);
         setSyncStatus('Error al cargar datos');
@@ -213,29 +239,90 @@ function App() {
     }
   }, []);
 
-  const calcularResumenComensales = useCallback(() => {
+  const calcularResumenComensales = useCallback(async () => {
     try {
-      const inscripciones = localStorageService.getInscripciones();
       const resumen = {};
       const diasResumenArr = dias.slice(0, CONFIG.DIAS_RESUMEN);
 
+      // Inicializar estructura del resumen
       diasResumenArr.forEach(fechaISO => {
         if (!resumen[fechaISO]) {
           resumen[fechaISO] = { Almuerzo: {}, Cena: {}, total: { Almuerzo: 0, Cena: 0 } };
         }
-
-        const inscripcionesDia = inscripciones.filter(item => item.fecha === fechaISO);
-        
-        inscripcionesDia.forEach(inscripcion => {
-          const comida = inscripcion.comida;
-          const opcion = inscripcion.opcion;
-          
-          if (opcion && opcion !== 'No') {
-            resumen[fechaISO].total[comida] += 1;
-            resumen[fechaISO][comida][opcion] = (resumen[fechaISO][comida][opcion] || 0) + 1;
-          }
-        });
       });
+
+      // 1. Obtener datos de localStorage
+      const inscripciones = localStorageService.getInscripciones();
+      
+      inscripciones.forEach(inscripcion => {
+        const fechaISO = inscripcion.fecha;
+        const comida = inscripcion.comida;
+        const opcion = inscripcion.opcion;
+        
+        if (diasResumenArr.includes(fechaISO) && opcion && opcion !== 'No') {
+          resumen[fechaISO].total[comida] += 1;
+          resumen[fechaISO][comida][opcion] = (resumen[fechaISO][comida][opcion] || 0) + 1;
+        }
+      });
+
+      // 2. Si Google Sheets está configurado, también obtener datos de ahí
+      if (useGoogleSheets && googleSheetsService.isConfigured()) {
+        try {
+          const sheetData = await googleSheetsService.getSheetData();
+          
+          // Procesar cada fila de Google Sheets
+          for (let row = 1; row < sheetData.length; row++) {
+            const rowData = sheetData[row];
+            if (!rowData || rowData.length < 3) continue;
+            
+            const fechaCell = rowData[1]; // Columna B: Fecha
+            const tipoCell = rowData[2]; // Columna C: Tipo (A/C)
+            
+            if (!fechaCell || !tipoCell) continue;
+            
+            // Convertir fecha de Google Sheets a formato ISO
+            const fechaFormatted = fechaCell.toString().trim();
+            const tipo = tipoCell.toString().trim().toUpperCase();
+            
+            // Convertir fecha DD/MM/YY a YYYY-MM-DD
+            const [day, month, year] = fechaFormatted.split('/').map(Number);
+            const fechaISO = `20${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            // Solo procesar si está en el rango de días del resumen
+            if (diasResumenArr.includes(fechaISO)) {
+              const comida = tipo === 'A' ? 'Almuerzo' : 'Cena';
+              
+              // Procesar cada columna de usuario
+              for (let col = 3; col < rowData.length; col++) {
+                const valor = rowData[col];
+                const headerRow = sheetData[0];
+                
+                if (valor && headerRow && headerRow[col]) {
+                  const opcion = valor.toString().trim();
+                  
+                  // Solo contar si no es vacío y no es "No"
+                  if (opcion !== '' && opcion !== 'No') {
+                    // Verificar si este usuario ya fue contado en localStorage para evitar duplicados
+                    const usuario = headerRow[col].toString().trim();
+                    const yaContadoEnLocal = inscripciones.some(ins => 
+                      ins.fecha === fechaISO && 
+                      ins.comida === comida && 
+                      ins.iniciales === usuario
+                    );
+                    
+                    if (!yaContadoEnLocal) {
+                      resumen[fechaISO].total[comida] += 1;
+                      resumen[fechaISO][comida][opcion] = (resumen[fechaISO][comida][opcion] || 0) + 1;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error al obtener datos de Google Sheets para resumen:', error);
+        }
+      }
 
       setDiasResumen(diasResumenArr);
       setResumenComensales(resumen);
@@ -243,37 +330,78 @@ function App() {
       console.error('Error al calcular resumen:', error);
       mostrarMensaje('Error al calcular el resumen de comensales', 'error');
     }
-  }, [dias, mostrarMensaje]);
+  }, [dias, mostrarMensaje, useGoogleSheets]);
 
   // Función para detectar usuarios sin comidas hoy
-  const detectarUsuariosSinComidasHoy = useCallback(() => {
+  const detectarUsuariosSinComidasHoy = useCallback(async () => {
     try {
       const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      
+      // Obtener datos de localStorage
       const inscripciones = localStorageService.getInscripciones();
       const inscripcionesHoy = inscripciones.filter(item => item.fecha === hoy);
       
-      // Obtener todos los usuarios que han cargado comidas hoy
+      // Obtener todos los usuarios que han cargado comidas hoy (desde localStorage)
       const usuariosConComidas = new Set();
       inscripcionesHoy.forEach(inscripcion => {
+        // Un usuario "ha cargado comidas" si tiene AL MENOS UNA inscripción válida
         if (inscripcion.opcion && inscripcion.opcion !== 'No') {
           usuariosConComidas.add(inscripcion.iniciales);
         }
       });
       
+      // Si Google Sheets está configurado, también obtener datos de ahí
+      if (useGoogleSheets && googleSheetsService.isConfigured()) {
+        try {
+          // Obtener datos de Google Sheets para hoy
+          const sheetData = await googleSheetsService.getSheetData();
+          const hoyFormatted = `${new Date().getDate()}/${new Date().getMonth() + 1}/${new Date().getFullYear().toString().slice(-2)}`;
+          
+          // Buscar filas de hoy en Google Sheets
+          for (let row = 1; row < sheetData.length; row++) {
+            const rowData = sheetData[row];
+            if (!rowData || rowData.length < 3) continue;
+            
+            const fechaCell = rowData[1]; // Columna B: Fecha
+            if (fechaCell && fechaCell.toString().trim() === hoyFormatted) {
+              // Esta fila es de hoy, revisar todas las columnas de usuarios
+              for (let col = 3; col < rowData.length; col++) {
+                const valor = rowData[col];
+                if (valor && valor.toString().trim() !== '' && valor.toString().trim() !== 'No') {
+                  // Obtener el nombre del usuario de la columna correspondiente
+                  const headerRow = sheetData[0];
+                  if (headerRow && headerRow[col]) {
+                    const usuario = headerRow[col].toString().trim();
+                    usuariosConComidas.add(usuario);
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error al obtener datos de Google Sheets para detectar usuarios sin comidas:', error);
+        }
+      }
+      
+      // Usar la lista dinámica de usuarios, con fallback a la estática
+      const listaUsuarios = usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista;
+      
       // Filtrar usuarios que NO han cargado comidas hoy
-      const usuariosSinComidas = inicialesLista.filter(ini => 
-        !usuariosConComidas.has(ini) && 
-        !ini.toLowerCase().includes('huesped') && 
-        !ini.toLowerCase().includes('invitad') &&
-        ini !== 'Plan'
-      );
+      const usuariosSinComidas = listaUsuarios.filter(ini => {
+        const tieneComidas = usuariosConComidas.has(ini);
+        const esEspecial = ini.toLowerCase().includes('huesped') || 
+                          ini.toLowerCase().includes('invitad') ||
+                          ini.toLowerCase().includes('plan') ||
+                          ini.trim() === '';
+        
+        return !tieneComidas && !esEspecial;
+      });
       
       setUsuariosSinComidasHoy(usuariosSinComidas);
-      console.log('Usuarios sin comidas hoy:', usuariosSinComidas);
     } catch (error) {
       console.error('Error al detectar usuarios sin comidas:', error);
     }
-  }, []);
+  }, [usuariosDinamicos, useGoogleSheets]);
 
   // Detectar usuarios sin comidas al cargar la aplicación
   useEffect(() => {
@@ -359,10 +487,13 @@ function App() {
             };
             
             // Guardar en localStorage
+            console.log('💾 Guardando inscripción:', inscripcion);
             if (localStorageService.saveInscripcion(inscripcion)) {
               guardados++;
+              console.log('✅ Inscripción guardada localmente:', inscripcion);
             } else {
               errores.push(`Error al guardar ${dia} ${comida} localmente`);
+              console.log('❌ Error al guardar localmente:', inscripcion);
             }
             
             // Guardar en Google Sheets si está configurado
@@ -386,8 +517,17 @@ function App() {
         setSyncStatus(errores.length > 0 ? 'Guardado con algunos errores' : 'Sincronizado correctamente');
         setTieneCambios(false);
         
-        // Actualizar detección de usuarios sin comidas
-        detectarUsuariosSinComidasHoy();
+        // Actualizar detección de usuarios sin comidas DESPUÉS de guardar
+        setTimeout(() => {
+          detectarUsuariosSinComidasHoy();
+        }, 100);
+        
+        // Actualizar resumen de comensales si está visible
+        if (showComensales) {
+          setTimeout(() => {
+            calcularResumenComensales();
+          }, 200);
+        }
       } else {
         mostrarMensaje('No hay cambios para guardar.', 'info');
       }
@@ -453,10 +593,10 @@ function App() {
     }
   }, [adminClave]);
 
-  const handleMostrarComensales = useCallback(() => {
+  const handleMostrarComensales = useCallback(async () => {
     setShowComensales(v => !v);
     if (!showComensales) {
-      calcularResumenComensales();
+      await calcularResumenComensales();
     }
   }, [showComensales, calcularResumenComensales]);
 
@@ -614,7 +754,7 @@ function App() {
 
       <div style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, paddingBottom: 16, borderBottom: '2px solid #eee', marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 12 }}>
-          {inicialesLista.map(ini => {
+          {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
             

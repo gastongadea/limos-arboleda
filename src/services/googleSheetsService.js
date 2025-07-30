@@ -329,14 +329,9 @@ class GoogleSheetsService {
       return null;
     }
     
-    console.log(`Buscando fila para fecha: ${targetDate}, tipo: ${comidaType}`);
-    
     // Convertir fecha ISO a formato DD/M/YY para comparar con la planilla
-    // Usar UTC para evitar problemas de zona horaria
     const [year, month, day] = targetDate.split('-').map(Number);
     const targetDateFormatted = `${day}/${month}/${year.toString().slice(-2)}`;
-    
-    console.log(`Fecha ISO: ${targetDate} -> Formato planilla: ${targetDateFormatted}`);
     
     for (let row = 1; row < sheetData.length; row++) {
       const rowData = sheetData[row];
@@ -351,10 +346,7 @@ class GoogleSheetsService {
       const fechaCellStr = fechaCell.toString().trim();
       const tipo = tipoCell.toString().trim().toUpperCase();
       
-      console.log(`Comparando: "${fechaCellStr}" con "${targetDateFormatted}" y tipo "${tipo}" con "${comidaType}"`);
-      
       if (fechaCellStr === targetDateFormatted && tipo === comidaType) {
-        console.log(`Fila encontrada: ${row + 1} para ${targetDateFormatted} - ${comidaType}`);
         return {
           row: row,
           data: rowData,
@@ -364,7 +356,6 @@ class GoogleSheetsService {
       }
     }
     
-    console.warn(`No se encontró fila para ${targetDateFormatted} - ${comidaType}`);
     return null;
   }
 
@@ -376,14 +367,11 @@ class GoogleSheetsService {
     }
     
     const headerRow = sheetData[0]; // Primera fila: títulos
-    console.log(`Buscando usuario: ${iniciales}`);
-    console.log('Headers disponibles:', headerRow);
     
     // En tu estructura: Columna A reservada, B fecha, C tipo, D+ usuarios
     for (let col = 3; col < headerRow.length; col++) { // Empezar desde columna D (índice 3)
       const userCell = headerRow[col];
       if (userCell && userCell.toString().toUpperCase() === iniciales.toUpperCase()) {
-        console.log(`Usuario encontrado en columna ${col + 1} (${this.numberToColumnLetter(col + 1)})`);
         return {
           col: col,
           letter: this.numberToColumnLetter(col + 1),
@@ -392,17 +380,13 @@ class GoogleSheetsService {
       }
     }
     
-    console.warn(`Usuario ${iniciales} no encontrado en la planilla`);
     return null;
   }
 
   // Crear fila para una fecha y tipo de comida usando Google Apps Script
   async createRowForDate(date, comidaType) {
     try {
-      console.log(`Creando fila para fecha: ${date}, tipo: ${comidaType}`);
-      
       // Convertir fecha ISO a formato DD/M/YY
-      // Usar UTC para evitar problemas de zona horaria
       const [year, month, day] = date.split('-').map(Number);
       const dateFormatted = `${day}/${month}/${year.toString().slice(-2)}`;
       
@@ -425,7 +409,6 @@ class GoogleSheetsService {
       // Limpiar cache para que se recarguen los datos
       this.clearCache();
       
-      console.log(`Fila creada exitosamente para ${dateFormatted} - ${comidaType}`);
       return true;
     } catch (error) {
       console.error('Error al crear fila:', error);
@@ -436,8 +419,6 @@ class GoogleSheetsService {
   // Guardar inscripción en Google Sheets
   async saveInscripcion(inscripcion) {
     try {
-      console.log('Guardando inscripción en Google Sheets:', inscripcion);
-      
       // Obtener datos actuales de la planilla
       const sheetData = await this.getSheetData();
       
@@ -449,7 +430,6 @@ class GoogleSheetsService {
       
       // Si no existe la fila, crearla automáticamente
       if (!rowInfo) {
-        console.log(`Fila no encontrada para ${inscripcion.fecha} - ${comidaType}, creando automáticamente...`);
         await this.createRowForDate(inscripcion.fecha, comidaType);
         
         // Recargar datos y buscar la fila nuevamente
@@ -469,8 +449,6 @@ class GoogleSheetsService {
       
       // Convertir coordenadas a formato A1
       const range = `${userCol.letter}${rowInfo.row + 1}`;
-      
-      console.log(`Actualizando celda ${range} para ${inscripcion.iniciales} - ${inscripcion.comida} - ${inscripcion.fecha}`);
       
       // Actualizar la celda
       await this.updateCell(range, inscripcion.opcion);
@@ -496,8 +474,6 @@ class GoogleSheetsService {
   // Verificar y crear fechas faltantes
   async ensureDatesExist(dias) {
     try {
-      console.log(`Verificando que existan todas las fechas: ${dias.length} días`);
-      
       const sheetData = await this.getSheetData();
       const fechasFaltantes = [];
       
@@ -516,15 +492,9 @@ class GoogleSheetsService {
       
       // Crear fechas faltantes
       if (fechasFaltantes.length > 0) {
-        console.log(`Creando ${fechasFaltantes.length} filas faltantes...`);
-        
         for (const fechaInfo of fechasFaltantes) {
           await this.createRowForDate(fechaInfo.fecha, fechaInfo.tipo);
         }
-        
-        console.log('Todas las fechas han sido creadas');
-      } else {
-        console.log('Todas las fechas ya existen');
       }
       
       return true;
@@ -537,8 +507,6 @@ class GoogleSheetsService {
   // Obtener inscripciones de un usuario
   async getUserInscripciones(iniciales, dias) {
     try {
-      console.log(`Obteniendo inscripciones para ${iniciales} en ${dias.length} días`);
-      
       // Asegurar que todas las fechas existan
       await this.ensureDatesExist(dias);
       
@@ -558,7 +526,6 @@ class GoogleSheetsService {
       const userCol = this.findUserColumn(sheetData, iniciales);
       
       if (!userCol) {
-        console.log(`Usuario ${iniciales} no encontrado, retornando objeto vacío`);
         return {};
       }
       
@@ -580,7 +547,6 @@ class GoogleSheetsService {
         }
       });
       
-      console.log(`Inscripciones obtenidas para ${iniciales}:`, inscripciones);
       return inscripciones;
     } catch (error) {
       console.error('Error al obtener inscripciones del usuario:', error);
