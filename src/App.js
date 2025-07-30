@@ -741,6 +741,27 @@ function App() {
         onClose={() => setMensaje('')} 
       />
 
+      <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 8 }}>
+        <a
+          href="https://docs.google.com/spreadsheets/d/1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8/edit?gid=215982293"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ 
+            padding: '8px 16px', 
+            background: '#4caf50', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: 4, 
+            cursor: 'pointer', 
+            fontWeight: 'bold',
+            textDecoration: 'none',
+            display: 'inline-block'
+          }}
+        >
+          📊 Planilla
+        </a>
+      </div>
+
       <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
         <button
           style={{ padding: '8px 16px', background: '#888', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
@@ -750,7 +771,7 @@ function App() {
         </button>
       </div>
 
-      <h2 style={{ marginTop: '60px' }}>Anotarse a las comidas - Limos Arboleda</h2>
+      <h2 style={{ marginTop: '60px' }}>Anotarse a las comidas - Arboleda</h2>
 
       <div style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, paddingBottom: 16, borderBottom: '2px solid #eee', marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 12 }}>
@@ -800,6 +821,7 @@ function App() {
           })}
         </div>
 
+        {/* Botones ocultos - Comentados temporalmente
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 16 }}>
           <button 
             type="button" 
@@ -836,6 +858,7 @@ function App() {
             {showComensales ? 'Ocultar comensales' : 'Comensales'}
           </button>
         </div>
+        */}
         
         {/* Estado de sincronización (solo mostrar si hay problemas) */}
         {!googleSheetsService.isConfigured() && (
