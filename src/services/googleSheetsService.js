@@ -1,11 +1,13 @@
 import envLoader from '../config/envLoader';
+import metaConfig from '../config/metaConfig';
 
 // Servicio para conectar con Google Sheets API
 class GoogleSheetsService {
   constructor() {
-    this.apiKey = envLoader.getEnvVar('REACT_APP_GOOGLE_API_KEY');
-    this.sheetId = envLoader.getEnvVar('REACT_APP_GOOGLE_SHEET_ID');
-    this.appsScriptUrl = envLoader.getEnvVar('REACT_APP_GOOGLE_APPS_SCRIPT_URL');
+    // Usar MetaConfig como fallback para GitHub Pages
+    this.apiKey = envLoader.getEnvVar('REACT_APP_GOOGLE_API_KEY') || metaConfig.get('REACT_APP_GOOGLE_API_KEY');
+    this.sheetId = envLoader.getEnvVar('REACT_APP_GOOGLE_SHEET_ID') || metaConfig.get('REACT_APP_GOOGLE_SHEET_ID');
+    this.appsScriptUrl = envLoader.getEnvVar('REACT_APP_GOOGLE_APPS_SCRIPT_URL') || metaConfig.get('REACT_APP_GOOGLE_APPS_SCRIPT_URL');
     this.serviceAccountEmail = envLoader.getEnvVar('REACT_APP_GOOGLE_SERVICE_ACCOUNT_EMAIL');
     this.privateKey = envLoader.getEnvVar('REACT_APP_GOOGLE_PRIVATE_KEY');
     this.baseUrl = 'https://sheets.googleapis.com/v4/spreadsheets';

@@ -19,8 +19,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "predeploy": "npm run update-meta-tags && npm run build",
+    "deploy": "gh-pages -d build",
+    "update-meta-tags": "node scripts/update-meta-tags.js"
   },
   "eslintConfig": {
     "extends": [
