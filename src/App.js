@@ -812,18 +812,52 @@ function App() {
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-secondary"
-            style={{ textDecoration: 'none' }}
+            style={{ 
+              textDecoration: 'none',
+              padding: '12px',
+              borderRadius: '50%',
+              width: '48px',
+              height: '48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px'
+            }}
+            title="Planilla"
           >
-            📊 Planilla
+            📊
           </a>
         </div>
 
         <div style={{ position: 'absolute', top: 16, right: 40, display: 'flex', gap: 8, zIndex: 100 }}>
           <button
-            className="btn btn-outline"
             onClick={handleOpenConfig}
+            style={{
+              padding: '12px',
+              borderRadius: '50%',
+              width: '48px',
+              height: '48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              color: 'var(--primary-color)'
+            }}
+            title="Configuración"
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'scale(1.1)';
+              e.target.style.color = '#e55a2b';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'scale(1)';
+              e.target.style.color = 'var(--primary-color)';
+            }}
           >
-            ⚙️ Configuración
+            ⚙️
           </button>
         </div>
 
@@ -838,7 +872,7 @@ function App() {
       }}>
         <div className="card-header">
           <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '18px' }}>
-            👥 Selecciona tu usuario
+            👥 Selecciona tus iniciales
           </h3>
         </div>
         <div style={{ 
