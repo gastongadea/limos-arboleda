@@ -46,10 +46,20 @@ class GoogleSheetsService {
       // Determinar si estamos en desarrollo o producción
       const isDevelopment = process.env.NODE_ENV === 'development';
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isGitHubPages = window.location.hostname.includes('github.io');
       
-      // En desarrollo: intentar proxy local primero
+      // DEBUG: Log de depuración para entender el entorno
+      console.log('🔍 DEBUG - testGoogleAppsScript - Entorno detectado:');
+      console.log('  - NODE_ENV:', process.env.NODE_ENV);
+      console.log('  - hostname:', window.location.hostname);
+      console.log('  - isDevelopment:', isDevelopment);
+      console.log('  - isLocalhost:', isLocalhost);
+      console.log('  - isGitHubPages:', isGitHubPages);
+      
+      // En desarrollo local: intentar proxy local primero
       if (isDevelopment && isLocalhost) {
         try {
+          console.log('🔄 [VERSIÓN ACTUALIZADA] testGoogleAppsScript - Intentando proxy local...');
           const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
           const proxyResponse = await fetch(proxyUrl, {
             method: 'POST',
@@ -71,55 +81,73 @@ class GoogleSheetsService {
             return { working: true, data: result };
           }
         } catch (proxyError) {
-          console.log('Proxy local no disponible, intentando proxy de producción...');
+          console.log('Proxy local no disponible, usando llamada directa...');
         }
       }
       
-      // En producción o si el proxy local falla: usar proxy de Vercel
-      try {
-        const vercelProxyUrl = '/api/proxy';
-        const vercelResponse = await fetch(vercelProxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'testConnection',
-            data: {
-              action: 'testConnection',
-              sheetId: this.sheetId,
-              data: {}
-            }
-          })
-        });
-
-        if (vercelResponse.ok) {
-          const result = await vercelResponse.json();
-          return { working: true, data: result };
-        }
-      } catch (vercelError) {
-        console.log('Proxy de producción no disponible, intentando llamada directa...');
-      }
+      // En GitHub Pages o producción: usar petición GET para evitar CORS
+      console.log('🔄 [VERSIÓN FINAL] testGoogleAppsScript - Llamando directamente a Google Apps Script con GET...');
       
-      // Último recurso: llamar directamente
-      const response = await fetch(this.appsScriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'testConnection',
-          sheetId: this.sheetId,
-          data: {}
-        })
+      // Convertir datos a parámetros de URL para petición GET
+      const params = new URLSearchParams({
+        action: 'testConnection',
+        sheetId: this.sheetId,
+        data: JSON.stringify({})
       });
-
-      if (!response.ok) {
-        return { working: false, error: `HTTP ${response.status}` };
-      }
-
-      const result = await response.json();
-      return { working: true, data: result };
+      
+      const url = `${this.appsScriptUrl}?${params.toString()}`;
+      console.log('URL de petición test:', url);
+      
+             // Usar JSONP para evitar CORS completamente
+       return new Promise((resolve, reject) => {
+         const script = document.createElement('script');
+         const callbackName = 'jsonpCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+         let isCompleted = false;
+         
+         // Función de limpieza segura
+         const cleanup = () => {
+           if (isCompleted) return;
+           isCompleted = true;
+           
+           try {
+             if (script.parentNode) {
+               document.head.removeChild(script);
+             }
+           } catch (e) {
+             console.warn('Error limpiando script JSONP:', e);
+           }
+           
+           try {
+             delete window[callbackName];
+           } catch (e) {
+             console.warn('Error eliminando callback JSONP:', e);
+           }
+         };
+         
+         // Crear función de callback global
+         window[callbackName] = function(data) {
+           cleanup();
+           clearTimeout(timeout);
+           resolve({ working: true, data: data });
+         };
+         
+         // Configurar timeout
+         const timeout = setTimeout(() => {
+           cleanup();
+           reject(new Error('Timeout en petición JSONP'));
+         }, 10000);
+         
+         // Crear URL con callback
+         const jsonpUrl = `${url}&callback=${callbackName}`;
+         script.src = jsonpUrl;
+         script.onerror = () => {
+           cleanup();
+           clearTimeout(timeout);
+           reject(new Error('Error cargando script JSONP'));
+         };
+         
+         document.head.appendChild(script);
+       });
     } catch (error) {
       return { working: false, error: error.message };
     }
@@ -166,9 +194,18 @@ class GoogleSheetsService {
 
   // Método alternativo: usar Google Apps Script como proxy
   async callGoogleAppsScript(action, data) {
-    // Determinar si estamos en desarrollo o producción (al inicio de la función)
+    // Determinar si estamos en desarrollo o producción
     const isDevelopment = process.env.NODE_ENV === 'development';
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isGitHubPages = window.location.hostname.includes('github.io');
+    
+    // DEBUG: Log de depuración para entender el entorno
+    console.log('🔍 DEBUG - Entorno detectado:');
+    console.log('  - NODE_ENV:', process.env.NODE_ENV);
+    console.log('  - hostname:', window.location.hostname);
+    console.log('  - isDevelopment:', isDevelopment);
+    console.log('  - isLocalhost:', isLocalhost);
+    console.log('  - isGitHubPages:', isGitHubPages);
     
     try {
       if (!this.appsScriptUrl) {
@@ -179,10 +216,10 @@ class GoogleSheetsService {
       console.log('Action:', action);
       console.log('Data:', data);
       
-      // En desarrollo: intentar proxy local primero
+      // En desarrollo local: intentar proxy local primero
       if (isDevelopment && isLocalhost) {
         try {
-          console.log('🔄 Intentando proxy local...');
+          console.log('🔄 [VERSIÓN ACTUALIZADA] Intentando proxy local...');
           const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
           const proxyResponse = await fetch(proxyUrl, {
             method: 'POST',
@@ -210,81 +247,90 @@ class GoogleSheetsService {
             return result;
           }
         } catch (proxyError) {
-          console.log('Proxy local no disponible, intentando proxy de producción...');
+          console.log('Proxy local no disponible, usando llamada directa...');
         }
       }
       
-      // En producción o si el proxy local falla: usar proxy de Vercel
-      try {
-        console.log('🔄 Usando proxy de producción...');
-        const vercelProxyUrl = '/api/proxy';
-        const vercelResponse = await fetch(vercelProxyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'write',
-            data: {
-              action,
-              sheetId: this.sheetId,
-              data
-            }
-          })
-        });
-
-        if (vercelResponse.ok) {
-          const result = await vercelResponse.json();
-          console.log('✅ Respuesta del proxy de producción:', result);
-          
-          if (result.success === false) {
-            throw new Error(`Error en Apps Script: ${result.error || 'Error desconocido'}`);
-          }
-          
-          return result;
-        }
-      } catch (vercelError) {
-        console.log('Proxy de producción no disponible, intentando llamada directa...');
-      }
+      // En GitHub Pages o producción: usar petición GET para evitar CORS
+      console.log('🔄 [VERSIÓN FINAL] Llamando directamente a Google Apps Script con GET...');
       
-      // Último recurso: llamar directamente a Google Apps Script
-      console.log('🔄 Intentando llamada directa a Google Apps Script...');
-      const response = await fetch(this.appsScriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action,
-          sheetId: this.sheetId,
-          data
-        })
+      // Convertir datos a parámetros de URL para petición GET
+      const params = new URLSearchParams({
+        action: action,
+        sheetId: this.sheetId,
+        data: JSON.stringify(data)
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Error HTTP ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Respuesta directa de Google Apps Script:', result);
       
-      // Verificar si la operación fue exitosa
-      if (result.success === false) {
-        throw new Error(`Error en Apps Script: ${result.error || 'Error desconocido'}`);
-      }
+      const url = `${this.appsScriptUrl}?${params.toString()}`;
+      console.log('URL de petición:', url);
       
-      return result;
+             // Usar JSONP para evitar CORS completamente
+       return new Promise((resolve, reject) => {
+         const script = document.createElement('script');
+         const callbackName = 'jsonpCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+         let isCompleted = false;
+         
+         // Función de limpieza segura
+         const cleanup = () => {
+           if (isCompleted) return;
+           isCompleted = true;
+           
+           try {
+             if (script.parentNode) {
+               document.head.removeChild(script);
+             }
+           } catch (e) {
+             console.warn('Error limpiando script JSONP:', e);
+           }
+           
+           try {
+             delete window[callbackName];
+           } catch (e) {
+             console.warn('Error eliminando callback JSONP:', e);
+           }
+         };
+         
+         // Crear función de callback global
+         window[callbackName] = function(data) {
+           cleanup();
+           clearTimeout(timeout);
+           console.log('✅ Respuesta directa de Google Apps Script:', data);
+           
+           // Verificar si la operación fue exitosa
+           if (data.success === false) {
+             reject(new Error(`Error en Apps Script: ${data.error || 'Error desconocido'}`));
+           } else {
+             resolve(data);
+           }
+         };
+         
+         // Configurar timeout
+         const timeout = setTimeout(() => {
+           cleanup();
+           reject(new Error('Timeout en petición JSONP'));
+         }, 10000);
+         
+         // Crear URL con callback
+         const jsonpUrl = `${url}&callback=${callbackName}`;
+         script.src = jsonpUrl;
+         script.onerror = () => {
+           cleanup();
+           clearTimeout(timeout);
+           reject(new Error('Error cargando script JSONP'));
+         };
+         
+         document.head.appendChild(script);
+       });
       
     } catch (error) {
       console.error('Error llamando Google Apps Script:', error);
       
-      // Si hay error de CORS, sugerir usar el proxy
+      // Si hay error de CORS en GitHub Pages, mostrar mensaje específico
       if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-        if (isDevelopment && isLocalhost) {
+        if (isGitHubPages) {
+          console.warn('💡 Error de CORS en GitHub Pages. Verifica que el Google Apps Script esté configurado para permitir peticiones desde tu dominio.');
+        } else if (isDevelopment && isLocalhost) {
           console.warn('💡 Sugerencia: Ejecuta el proxy server con: node proxy-server.js');
-        } else {
-          console.warn('💡 Sugerencia: Verifica que el proxy de producción esté configurado correctamente');
         }
       }
       
@@ -591,18 +637,9 @@ class GoogleSheetsService {
     }
   }
 
-  // Guardar inscripción en Google Sheets
+  // Guardar inscripción en Google Sheets (versión optimizada - sin verificación redundante)
   async saveInscripcion(inscripcion) {
     try {
-      // Primero verificar si Google Apps Script está funcionando
-      const scriptTest = await this.testGoogleAppsScript();
-      
-      if (!scriptTest.working) {
-        console.warn('Google Apps Script no está funcionando, guardando solo localmente');
-        console.warn('Error:', scriptTest.error);
-        throw new Error(`Google Apps Script no disponible: ${scriptTest.error}`);
-      }
-
       // Obtener datos actuales de la planilla
       const sheetData = await this.getSheetData();
       
@@ -634,7 +671,7 @@ class GoogleSheetsService {
       // Convertir coordenadas a formato A1
       const range = `${userCol.letter}${rowInfo.row + 1}`;
       
-      // Actualizar la celda
+      // Actualizar la celda directamente (la verificación ya se hizo en handleSubmit)
       await this.updateCell(range, inscripcion.opcion);
       
       return true;

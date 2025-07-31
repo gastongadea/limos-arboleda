@@ -470,22 +470,38 @@ function App() {
 
     const tipoUsuario = deducirTipoUsuario(iniciales);
     let guardados = 0;
+    let registrosGuardados = 0; // Contador para registros guardados en Google Sheets
     let errores = [];
 
     try {
+      // Obtener datos existentes de Google Sheets para comparar
+      let datosExistentes = {};
+      if (googleSheetsService.isConfigured()) {
+        try {
+          datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
+        } catch (error) {
+          console.warn('No se pudieron obtener datos existentes de Google Sheets:', error);
+        }
+      }
+      
       for (const dia of dias) {
         for (const comida of ['Almuerzo', 'Cena']) {
           const opcion = seleccion[dia]?.[comida] || '';
-          if (opcion) {
-            const inscripcion = {
-              fecha: dia,
-              comida,
-              iniciales,
-              tipoUsuario,
-              opcion,
-            };
-            
-            // Guardar en localStorage
+          // Procesar tanto comidas marcadas como desmarcadas
+          const inscripcion = {
+            fecha: dia,
+            comida,
+            iniciales,
+            tipoUsuario,
+            opcion,
+          };
+          
+          // Verificar si el valor ha cambiado
+          const valorExistente = datosExistentes[dia]?.[comida] || '';
+          const haCambiado = valorExistente !== opcion;
+          
+          // Solo guardar en localStorage si hay un valor o si había un valor antes
+          if (opcion || valorExistente) {
             console.log('💾 Guardando inscripción:', inscripcion);
             if (localStorageService.saveInscripcion(inscripcion)) {
               guardados++;
@@ -495,16 +511,19 @@ function App() {
               console.log('❌ Error al guardar localmente:', inscripcion);
             }
             
-            // Guardar en Google Sheets si está configurado
-            if (googleSheetsService.isConfigured()) {
+            // Guardar en Google Sheets solo si ha cambiado
+            if (googleSheetsService.isConfigured() && haCambiado) {
               try {
-                console.log(`💾 Guardando en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion}`);
+                console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorExistente}")`);
                 await googleSheetsService.saveInscripcion(inscripcion);
-                console.log(`✅ Guardado exitosamente en Google Sheets: ${dia} ${comida}`);
+                console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
+                registrosGuardados++; // Solo contar los que realmente se guardaron
               } catch (error) {
-                console.error(`❌ Error guardando en Google Sheets: ${dia} ${comida}`, error);
+                console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
                 errores.push(`Error en ${dia} ${comida}: ${error.message}`);
               }
+            } else if (googleSheetsService.isConfigured() && !haCambiado) {
+              console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
             }
           }
         }
@@ -512,7 +531,7 @@ function App() {
 
       if (guardados > 0) {
         const mensaje = googleSheetsService.isConfigured() 
-          ? `¡Inscripción guardada! ${guardados} registros guardados localmente y en Google Sheets.`
+          ? `¡Inscripción guardada! ${guardados} registros guardados localmente${registrosGuardados > 0 ? `, ${registrosGuardados} sincronizados con Google Sheets` : ', sin cambios en Google Sheets'}.`
           : `¡Inscripción guardada! ${guardados} registros guardados localmente.`;
         
         mostrarMensaje(mensaje, 'success');
