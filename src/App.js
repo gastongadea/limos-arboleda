@@ -34,9 +34,9 @@ const opcionesCena = [
   { valor: 'R', label: 'Reg' },
   { valor: 'N', label: 'No' },
   { valor: 'V', label: 'Vian' },
-  { valor: 'T', label: 'Tarde' },
+  { valor: 'T', label: 'T' },
   { valor: 'RT', label: 'Reg T' },
-  { valor: 'VRM', label: 'Vian R Mañana' },
+  { valor: 'VRM', label: 'Vian R Mañ' },
 ];
 
 // Constantes de configuración
@@ -673,7 +673,7 @@ function App() {
   }, [mostrarMensaje]);
 
   const renderBotones = useCallback((opciones, dia, comida) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '6px 0' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
       {opciones.map(op => {
         const isSelected = seleccion[dia]?.[comida] === op.valor;
         return (
@@ -681,30 +681,46 @@ function App() {
             key={op.valor}
             type="button"
             style={{
-              padding: '6px 10px',
-              background: isSelected ? '#1976d2' : '#f5f5f5',
-              color: isSelected ? 'white' : '#333',
-              border: `1px solid ${isSelected ? '#1976d2' : '#ddd'}`,
-              borderRadius: 4,
+              padding: '8px 12px',
+              fontSize: '14px',
+              fontWeight: 'normal',
+              borderRadius: '8px',
+              border: isSelected ? '2px solid #1976d2' : '2px solid #e8d5c4',
               cursor: 'pointer',
-              fontWeight: isSelected ? 'bold' : 'normal',
-              transition: 'all 0.2s ease',
-              boxShadow: isSelected ? '0 2px 4px rgba(25, 118, 210, 0.2)' : 'none',
+              transition: 'all 0.3s ease',
+              background: isSelected 
+                ? 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)'
+                : 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+              color: isSelected ? 'white' : '#2c1810',
+              boxShadow: isSelected ? '0 4px 16px rgba(25, 118, 210, 0.2)' : 'none',
+              transform: isSelected ? 'translateY(-1px)' : 'none',
             }}
             onClick={() => handleChange(dia, comida, op.valor)}
+            title={isSelected ? 'Presiona para borrar' : `Seleccionar ${op.label}`}
             onMouseEnter={(e) => {
               if (!isSelected) {
-                e.target.style.background = '#e3f2fd';
+                e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
                 e.target.style.borderColor = '#1976d2';
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+              } else {
+                e.target.style.background = 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)';
+                e.target.style.transform = 'translateY(-3px)';
+                e.target.style.boxShadow = '0 8px 24px rgba(25, 118, 210, 0.3)';
               }
             }}
             onMouseLeave={(e) => {
               if (!isSelected) {
-                e.target.style.background = '#f5f5f5';
-                e.target.style.borderColor = '#ddd';
+                e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+                e.target.style.borderColor = '#e8d5c4';
+                e.target.style.transform = 'none';
+                e.target.style.boxShadow = 'none';
+              } else {
+                e.target.style.background = 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)';
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
               }
             }}
-            title={isSelected ? 'Presiona para borrar' : `Seleccionar ${op.label}`}
           >
             {op.label}
           </button>
@@ -719,23 +735,11 @@ function App() {
   const Notification = ({ message, type, onClose }) => {
     if (!message) return null;
     
-    const colors = {
-      info: '#2196f3',
-      success: '#4caf50',
-      error: '#f44336',
-      warning: '#ff9800'
-    };
-    
     return (
-      <div style={{
+      <div className={`notification ${type}`} style={{
         position: 'fixed',
         top: 20,
         right: 20,
-        background: colors[type] || colors.info,
-        color: 'white',
-        padding: '12px 20px',
-        borderRadius: 8,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         zIndex: 10000,
         maxWidth: 400,
         animation: 'slideIn 0.3s ease'
@@ -750,7 +754,8 @@ function App() {
               color: 'white',
               cursor: 'pointer',
               marginLeft: 10,
-              fontSize: 18
+              fontSize: 18,
+              fontWeight: 'bold'
             }}
           >
             ×
@@ -761,7 +766,33 @@ function App() {
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: '2rem auto', padding: 20, position: 'relative' }}>
+    <>
+      {/* Partículas de fondo */}
+      <div className="particles">
+        <div className="particle"></div>
+        <div className="particle"></div>
+        <div className="particle"></div>
+        <div className="particle"></div>
+        <div className="particle"></div>
+      </div>
+
+      {/* Header con ícono de plato */}
+      <header className="app-header">
+        <div style={{ 
+          maxWidth: '900px', 
+          margin: '0 auto', 
+          padding: '0 40px',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <h1 className="app-title">
+            <span className="plate-icon">🍽️</span>
+            Comidas de Arboleda
+          </h1>
+        </div>
+      </header>
+
       {/* Notificación */}
       <Notification 
         message={mensaje} 
@@ -769,40 +800,53 @@ function App() {
         onClose={() => setMensaje('')} 
       />
 
-      <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', gap: 8 }}>
-        <a
-          href="https://docs.google.com/spreadsheets/d/1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8/edit?gid=215982293"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ 
-            padding: '8px 16px', 
-            background: '#4caf50', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: 4, 
-            cursor: 'pointer', 
-            fontWeight: 'bold',
-            textDecoration: 'none',
-            display: 'inline-block'
-          }}
-        >
-          📊 Planilla
-        </a>
-      </div>
+      <div className="app-container" style={{ 
+        marginTop: '20px',
+        marginLeft: '40px',
+        marginRight: '40px',
+        maxWidth: '900px'
+      }}>
+        <div style={{ position: 'absolute', top: 16, left: 40, display: 'flex', gap: 8, zIndex: 100 }}>
+          <a
+            href="https://docs.google.com/spreadsheets/d/1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8/edit?gid=215982293"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary"
+            style={{ textDecoration: 'none' }}
+          >
+            📊 Planilla
+          </a>
+        </div>
 
-      <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
-        <button
-          style={{ padding: '8px 16px', background: '#888', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
-          onClick={handleOpenConfig}
-        >
-          Configuración
-        </button>
-      </div>
+        <div style={{ position: 'absolute', top: 16, right: 40, display: 'flex', gap: 8, zIndex: 100 }}>
+          <button
+            className="btn btn-outline"
+            onClick={handleOpenConfig}
+          >
+            ⚙️ Configuración
+          </button>
+        </div>
 
-      <h2 style={{ marginTop: '60px' }}>Comidas de Arboleda</h2>
-
-      <div style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 10, paddingBottom: 16, borderBottom: '2px solid #eee', marginBottom: 16 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 12 }}>
+      <div className="card" style={{ 
+        position: 'sticky', 
+        top: 0, 
+        zIndex: 10, 
+        paddingBottom: 16, 
+        marginBottom: 16,
+        background: 'var(--card-background)',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <div className="card-header">
+          <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '18px' }}>
+            👥 Selecciona tu usuario
+          </h3>
+        </div>
+        <div style={{ 
+          display: 'flex', 
+          flexWrap: 'wrap', 
+          gap: '8px', 
+          marginBottom: 12
+        }}>
           {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
@@ -812,34 +856,64 @@ function App() {
                 key={ini}
                 type="button"
                 style={{
-                  padding: '8px 12px',
-                  background: esSeleccionado ? '#1976d2' : (sinComidasHoy ? '#ffebee' : '#eee'),
-                  color: esSeleccionado ? 'white' : (sinComidasHoy ? '#d32f2f' : 'black'),
-                  border: `1px solid ${sinComidasHoy ? '#f44336' : '#ccc'}`,
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontWeight: esSeleccionado ? 'bold' : (sinComidasHoy ? 'bold' : 'normal'),
-                  transition: 'all 0.2s ease',
                   position: 'relative',
+                  fontSize: '13px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: esSeleccionado ? '2px solid #1976d2' : '2px solid #e8d5c4',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  background: esSeleccionado 
+                    ? 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)'
+                    : 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+                  color: esSeleccionado ? 'white' : '#2c1810',
+                  boxShadow: esSeleccionado ? '0 4px 16px rgba(25, 118, 210, 0.2)' : 'none',
+                  transform: esSeleccionado ? 'translateY(-1px)' : 'none',
+                  fontWeight: esSeleccionado ? 'bold' : 'normal',
                 }}
                 onClick={() => handleCambioIniciales(ini)}
                 title={sinComidasHoy ? 'No ha cargado comidas hoy' : ''}
+                onMouseEnter={(e) => {
+                  if (!esSeleccionado) {
+                    e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+                    e.target.style.borderColor = '#1976d2';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                  } else {
+                    e.target.style.background = 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)';
+                    e.target.style.transform = 'translateY(-3px)';
+                    e.target.style.boxShadow = '0 8px 24px rgba(25, 118, 210, 0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!esSeleccionado) {
+                    e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+                    e.target.style.borderColor = '#e8d5c4';
+                    e.target.style.transform = 'none';
+                    e.target.style.boxShadow = 'none';
+                  } else {
+                    e.target.style.background = 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)';
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                  }
+                }}
               >
                 {ini}
                 {sinComidasHoy && (
                   <span style={{
                     position: 'absolute',
-                    top: '-2px',
-                    right: '-2px',
+                    top: '-4px',
+                    right: '-4px',
                     background: '#f44336',
                     color: 'white',
                     borderRadius: '50%',
-                    width: '8px',
-                    height: '8px',
-                    fontSize: '6px',
+                    width: '12px',
+                    height: '12px',
+                    fontSize: '8px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    fontWeight: 'bold'
                   }}>
                     !
                   </span>
@@ -890,29 +964,22 @@ function App() {
         
         {/* Estado de sincronización (solo mostrar si hay problemas) */}
         {!googleSheetsService.isConfigured() && (
-          <div style={{ 
-            fontSize: '12px', 
-            color: '#f44336',
-            marginBottom: '8px',
-            background: '#ffebee',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ffcdd2'
+          <div className="notification warning" style={{ 
+            position: 'static',
+            marginBottom: '12px',
+            fontSize: '14px'
           }}>
             ⚠️ Google Sheets no configurado. Los datos se guardan localmente.
           </div>
         )}
         
-
-        
-
-        
         {/* Estado de sincronización */}
         {syncStatus && (
           <div style={{ 
-            fontSize: '12px', 
-            color: syncStatus.includes('Error') ? '#d32f2f' : '#1976d2',
-            marginBottom: '8px'
+            fontSize: '14px', 
+            color: syncStatus.includes('Error') ? 'var(--error-color)' : 'var(--primary-color)',
+            marginBottom: '8px',
+            fontWeight: 'bold'
           }}>
             {syncStatus}
           </div>
@@ -920,17 +987,13 @@ function App() {
         
         {/* Errores de sincronización */}
         {syncErrors.length > 0 && (
-          <div style={{ 
-            fontSize: '12px', 
-            color: '#d32f2f',
-            marginBottom: '8px',
-            background: '#ffebee',
-            padding: '8px',
-            borderRadius: '4px',
-            border: '1px solid #ffcdd2'
+          <div className="notification error" style={{ 
+            position: 'static',
+            marginBottom: '12px',
+            fontSize: '14px'
           }}>
             <strong>Errores de sincronización:</strong>
-            <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+            <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
               {syncErrors.slice(0, 3).map((error, index) => (
                 <li key={index}>{error}</li>
               ))}
@@ -956,40 +1019,57 @@ function App() {
             }
             return (
               <React.Fragment key={dia}>
-                <div style={{ marginBottom: 20, background: esFinDeSemanaDia ? '#f0f0f0' : undefined, borderRadius: 8, padding: esFinDeSemanaDia ? '8px 0' : 0 }}>
-                  <strong style={{ display: 'block', background: esFinDeSemanaDia ? '#e0e0e0' : undefined, borderRadius: 6, padding: '4px 8px', marginBottom: 4 }}>
-                    {formatearFecha(dia)}
-                  </strong>
-                  <div style={{ display: 'flex', alignItems: 'center', margin: '6px 0', background: esFinDeSemanaDia ? '#f0f0f0' : undefined }}>
-                    <label style={{ minWidth: 80, marginRight: 8 }}>Almuerzo: </label>
+                <div className="card" style={{ 
+                  marginBottom: 20, 
+                  background: esFinDeSemanaDia ? 'rgba(255, 107, 53, 0.05)' : undefined,
+                  border: esFinDeSemanaDia ? '2px solid var(--accent-color)' : undefined
+                }}>
+                  <div className="card-header">
+                    <strong style={{ 
+                      display: 'block', 
+                      color: esFinDeSemanaDia ? 'var(--primary-color)' : 'var(--text-primary)',
+                      fontSize: '16px',
+                      fontWeight: 'bold'
+                    }}>
+                      {formatearFecha(dia)}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0' }}>
+                    <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      🍽️ Almuerzo:
+                    </label>
                     {esPlanOInvitados ? (
                       <input
                         type="number"
                         min={0}
                         value={seleccion[dia]?.Almuerzo || ''}
                         onChange={e => handleInputChange(dia, 'Almuerzo', e.target.value)}
-                        style={{ width: 80, padding: 4 }}
+                        className="form-input"
+                        style={{ width: 100, padding: 8 }}
                       />
                     ) : (
                       renderBotones(opcionesAlmuerzo, dia, 'Almuerzo')
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', margin: '6px 0', background: esFinDeSemanaDia ? '#f0f0f0' : undefined }}>
-                    <label style={{ minWidth: 80, marginRight: 8 }}>Cena: </label>
+                  <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0' }}>
+                    <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      🌙 Cena:
+                    </label>
                     {esPlanOInvitados ? (
                       <input
                         type="number"
                         min={0}
                         value={seleccion[dia]?.Cena || ''}
                         onChange={e => handleInputChange(dia, 'Cena', e.target.value)}
-                        style={{ width: 80, padding: 4 }}
+                        className="form-input"
+                        style={{ width: 100, padding: 8 }}
                       />
                     ) : (
                       renderBotones(opcionesCena, dia, 'Cena')
                     )}
                   </div>
                 </div>
-                {mostrarLineaMes && <hr style={{ border: 0, borderTop: '2px solid #bbb', margin: '18px 0' }} />}
+                {mostrarLineaMes && <hr style={{ border: 0, borderTop: '3px solid var(--accent-color)', margin: '24px 0', borderRadius: '2px' }} />}
               </React.Fragment>
             );
           })}
@@ -997,10 +1077,14 @@ function App() {
       )}
 
       {showComensales && (
-        <div style={{ marginTop: 32, marginBottom: 32 }}>
-          <h3>Comensales próximos 7 días</h3>
+        <div className="card" style={{ marginTop: 32, marginBottom: 32 }}>
+          <div className="card-header">
+            <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>
+              📊 Comensales próximos 7 días
+            </h3>
+          </div>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <table className="table">
               <thead>
                 <tr>
                   <th style={{ width: '20%' }}>Día</th>
@@ -1016,12 +1100,16 @@ function App() {
                     return (
                       <tr key={dia + comida}>
                         <td>{formatearFecha(dia)}</td>
-                        <td style={{ fontWeight: 'bold' }}>{comida}: <span style={{ color: '#1976d2' }}>{total}</span></td>
+                        <td style={{ fontWeight: 'bold' }}>
+                          {comida}: <span style={{ color: 'var(--primary-color)' }}>{total}</span>
+                        </td>
                         <td>
                           {Object.entries(desglose)
                             .sort((a, b) => b[1] - a[1])
                             .map(([op, cant]) => (
-                              <span key={op} style={{ marginRight: 12 }}>{op}: <b>{cant}</b></span>
+                              <span key={op} style={{ marginRight: 12 }}>
+                                <span className="badge badge-primary">{op}</span>: <b>{cant}</b>
+                              </span>
                             ))}
                         </td>
                       </tr>
@@ -1040,92 +1128,108 @@ function App() {
         onRequestClose={handleCloseConfig}
         style={{
           content: {
-            maxWidth: 400,
+            maxWidth: 500,
             margin: 'auto',
             padding: 24,
-            borderRadius: 8,
+            borderRadius: 'var(--border-radius)',
             zIndex: 9999,
+            background: 'white',
+            border: '3px solid var(--primary-color)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            position: 'relative',
           },
           overlay: {
             zIndex: 9998,
-            backgroundColor: 'rgba(0,0,0,0.4)'
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(5px)'
           }
         }}
         contentLabel="Configuración"
       >
         {adminStep === 'clave' ? (
           <form onSubmit={handleAdminSubmit}>
-            <h3>Clave de administrador</h3>
-            <input
-              type="password"
-              value={adminClave}
-              onChange={e => setAdminClave(e.target.value)}
-              style={{ width: '100%', padding: 8, marginBottom: 12 }}
-              autoFocus
-            />
-            {adminError && <div style={{ color: 'red', marginBottom: 8 }}>{adminError}</div>}
-            <button type="submit" style={{ padding: '8px 16px', fontWeight: 'bold', background: '#1976d2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Ingresar</button>
-            <button type="button" onClick={handleCloseConfig} style={{ marginLeft: 8, padding: '8px 16px', background: '#eee', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}>Cancelar</button>
+            <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>
+              🔐 Clave de administrador
+            </h3>
+            <div className="form-group">
+              <input
+                type="password"
+                value={adminClave}
+                onChange={e => setAdminClave(e.target.value)}
+                className="form-input"
+                placeholder="Ingresa la clave de administrador"
+                autoFocus
+              />
+            </div>
+            {adminError && <div className="notification error" style={{ position: 'static', marginBottom: '12px' }}>{adminError}</div>}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button type="submit" className="btn btn-primary">Ingresar</button>
+              <button type="button" onClick={handleCloseConfig} className="btn btn-outline">Cancelar</button>
+            </div>
           </form>
         ) : (
           <div>
-            <h3>Panel de configuración</h3>
-            <p style={{ marginBottom: 16 }}>Acceso concedido. Herramientas de administración:</p>
+            <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>
+              ⚙️ Panel de configuración
+            </h3>
+            <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>
+              Acceso concedido. Herramientas de administración:
+            </p>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button
-                style={{ padding: '8px 16px', background: '#ff9800', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-warning"
                 onClick={() => { setShowDataManager(true); setShowConfig(false); }}
               >
                 📊 Gestión de Datos
               </button>
               
               <button
-                style={{ padding: '8px 16px', background: '#4caf50', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-secondary"
                 onClick={() => { setShowStats(true); setShowConfig(false); }}
               >
                 📊 Estadísticas
               </button>
               
               <button
-                style={{ padding: '8px 16px', background: '#9c27b0', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-primary"
                 onClick={() => { setShowGoogleSheetsTest(true); setShowConfig(false); }}
               >
                 🔧 Google Sheets
               </button>
               
               <button
-                style={{ padding: '8px 16px', background: '#ff9800', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-warning"
                 onClick={() => { setShowGoogleSheetsAPITest(true); setShowConfig(false); }}
               >
                 🔍 Test API
               </button>
               
               <button
-                style={{ padding: '8px 16px', background: '#4caf50', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-secondary"
                 onClick={() => { setShowGoogleSheetsDemo(true); setShowConfig(false); }}
               >
                 🎉 Demo
               </button>
               
-
-              
               <button
-                style={{ padding: '8px 16px', background: '#2196f3', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-primary"
                 onClick={() => { setShowSheetStructureValidator(true); setShowConfig(false); }}
               >
                 🔍 Validador de Estructura
               </button>
               
               <button
-                style={{ padding: '8px 16px', background: '#ff5722', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+                className="btn btn-error"
                 onClick={() => { setShowSyncDebugger(true); setShowConfig(false); }}
               >
                 🐛 Debug Sync
               </button>
             </div>
             
-            <button type="button" onClick={handleCloseConfig} style={{ marginTop: 16, padding: '8px 16px', background: '#eee', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}>Cerrar</button>
+            <button type="button" onClick={handleCloseConfig} className="btn btn-outline" style={{ marginTop: 20 }}>
+              Cerrar
+            </button>
           </div>
         )}
       </Modal>
@@ -1139,42 +1243,50 @@ function App() {
             maxWidth: 500,
             margin: 'auto',
             padding: 24,
-            borderRadius: 8,
+            borderRadius: 'var(--border-radius)',
             zIndex: 9999,
+            background: 'white',
+            border: '3px solid var(--primary-color)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            position: 'relative',
           },
           overlay: {
             zIndex: 9998,
-            backgroundColor: 'rgba(0,0,0,0.4)'
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(5px)'
           }
         }}
         contentLabel="Gestión de Datos"
       >
-        <h3>Gestión de Datos</h3>
-        <p style={{ marginBottom: 16 }}>
+        <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>
+          📊 Gestión de Datos
+        </h3>
+        <p style={{ marginBottom: 20, color: 'var(--text-secondary)' }}>
           Los datos se guardan localmente en tu navegador. Puedes exportarlos para hacer respaldo o importarlos en otro dispositivo.
         </p>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <button 
             onClick={handleExportData}
-            style={{ padding: '12px 16px', background: '#4caf50', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+            className="btn btn-secondary"
           >
             📤 Exportar Datos
           </button>
           
-          <div>
-            <label style={{ display: 'block', marginBottom: 8, fontWeight: 'bold' }}>📥 Importar Datos:</label>
+          <div className="form-group">
+            <label className="form-label">📥 Importar Datos:</label>
             <input
               type="file"
               accept=".json"
               onChange={handleImportData}
-              style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+              className="form-input"
+              style={{ padding: '8px' }}
             />
           </div>
           
           <button 
             onClick={handleClearAllData}
-            style={{ padding: '12px 16px', background: '#f44336', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}
+            className="btn btn-error"
           >
             🗑️ Borrar Todos los Datos
           </button>
@@ -1183,7 +1295,8 @@ function App() {
         <button 
           type="button" 
           onClick={() => setShowDataManager(false)} 
-          style={{ marginTop: 16, padding: '8px 16px', background: '#eee', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer' }}
+          className="btn btn-outline"
+          style={{ marginTop: 20 }}
         >
           Cerrar
         </button>
@@ -1236,8 +1349,8 @@ function App() {
         onClose={() => setShowSheetStructureValidator(false)} 
       />
 
-
-    </div>
+      </div>
+    </>
   );
 }
 
