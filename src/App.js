@@ -733,6 +733,17 @@ function App() {
 
   // Componente de notificación
   const Notification = ({ message, type, onClose }) => {
+    // Auto-cerrar después de 1 segundo
+    useEffect(() => {
+      if (message) {
+        const timer = setTimeout(() => {
+          onClose();
+        }, 1000);
+        
+        return () => clearTimeout(timer);
+      }
+    }, [message, onClose]);
+    
     if (!message) return null;
     
     return (
@@ -742,24 +753,12 @@ function App() {
         right: 20,
         zIndex: 10000,
         maxWidth: 400,
-        animation: 'slideIn 0.3s ease'
+        animation: 'slideIn 0.3s ease',
+        borderRadius: '8px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{message}</span>
-          <button 
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              marginLeft: 10,
-              fontSize: 18,
-              fontWeight: 'bold'
-            }}
-          >
-            ×
-          </button>
+          <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{message}</span>
         </div>
       </div>
     );
@@ -1085,7 +1084,7 @@ function App() {
                     </strong>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
-                    <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                    <label style={{ minWidth: 80, marginRight: 6, fontWeight: 'bold', color: 'var(--text-primary)' }}>
                       🍽️ Alm
                     </label>
                     {esPlanOInvitados ? (
@@ -1102,7 +1101,7 @@ function App() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
-                    <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                    <label style={{ minWidth: 80, marginRight: 6, fontWeight: 'bold', color: 'var(--text-primary)' }}>
                       🌙 Cena
                     </label>
                     {esPlanOInvitados ? (
