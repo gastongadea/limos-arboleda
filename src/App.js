@@ -184,7 +184,7 @@ function App() {
           const dataPromise = googleSheetsService.getUserInscripciones(iniciales, dias);
           
           nuevaSel = await Promise.race([dataPromise, timeoutPromise]);
-          setSyncStatus('Datos cargados desde Google Sheets');
+          setSyncStatus('');
         } else {
           // Cargar desde localStorage
           dias.forEach(dia => {
@@ -200,7 +200,7 @@ function App() {
               nuevaSel[dia] = { Almuerzo: '', Cena: '' };
             }
           });
-          setSyncStatus('Datos cargados desde localStorage');
+          setSyncStatus('');
         }
         
         setSeleccion(nuevaSel);
@@ -786,7 +786,7 @@ function App() {
           justifyContent: 'center',
           alignItems: 'center'
         }}>
-          <h1 className="app-title">
+          <h1 className="app-title" style={{ fontSize: '2rem' }}>
             <span className="plate-icon">🍽️</span>
             Comidas de Arboleda
           </h1>
@@ -801,12 +801,20 @@ function App() {
       />
 
       <div className="app-container" style={{ 
-        marginTop: '20px',
-        marginLeft: '40px',
-        marginRight: '40px',
-        maxWidth: '900px'
+        marginTop: '5px',
+        margin: '0px auto 0 auto',
+        maxWidth: '900px',
+        position: 'relative',
+        padding: '0 25px'
       }}>
-        <div style={{ position: 'absolute', top: 16, left: 40, display: 'flex', gap: 8, zIndex: 100 }}>
+        {/* Header con título y botones alineados */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          marginBottom: '2px',
+          padding: '0 10px'
+        }}>
           <a
             href="https://docs.google.com/spreadsheets/d/1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8/edit?gid=215982293"
             target="_blank"
@@ -814,33 +822,35 @@ function App() {
             className="btn btn-secondary"
             style={{ 
               textDecoration: 'none',
-              padding: '12px',
+              padding: '10px',
               borderRadius: '50%',
-              width: '48px',
-              height: '48px',
+              width: '40px',
+              height: '40px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px'
+              fontSize: '18px'
             }}
             title="Planilla"
           >
             📊
           </a>
-        </div>
 
-        <div style={{ position: 'absolute', top: 16, right: 40, display: 'flex', gap: 8, zIndex: 100 }}>
+          <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
+            👥 Selecciona tus iniciales
+          </h3>
+
           <button
             onClick={handleOpenConfig}
             style={{
-              padding: '12px',
+              padding: '10px',
               borderRadius: '50%',
-              width: '48px',
-              height: '48px',
+              width: '40px',
+              height: '40px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
+              fontSize: '18px',
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
@@ -865,16 +875,11 @@ function App() {
         position: 'sticky', 
         top: 0, 
         zIndex: 10, 
-        paddingBottom: 16, 
-        marginBottom: 16,
+        paddingBottom: 8, 
+        marginBottom: 8,
         background: 'var(--card-background)',
         backdropFilter: 'blur(10px)'
       }}>
-        <div className="card-header">
-          <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '18px' }}>
-            👥 Selecciona tus iniciales
-          </h3>
-        </div>
         <div style={{ 
           display: 'flex', 
           flexWrap: 'wrap', 
@@ -884,6 +889,9 @@ function App() {
           {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
+            const mostrarBoton = !iniciales || esSeleccionado; // Solo mostrar si no hay selección o es el seleccionado
+            
+            if (!mostrarBoton) return null;
             
             return (
               <button
@@ -1053,8 +1061,16 @@ function App() {
             }
             return (
               <React.Fragment key={dia}>
+                <hr style={{ 
+                  border: 0, 
+                  borderTop: '2px solid #ccc', 
+                  margin: '6px 0', 
+                  borderRadius: '1px',
+                  opacity: 1
+                }} />
                 <div className="card" style={{ 
-                  marginBottom: 20, 
+                  marginBottom: 8, 
+                  padding: '8px',
                   background: esFinDeSemanaDia ? 'rgba(255, 107, 53, 0.05)' : undefined,
                   border: esFinDeSemanaDia ? '2px solid var(--accent-color)' : undefined
                 }}>
@@ -1068,9 +1084,9 @@ function App() {
                       {formatearFecha(dia)}
                     </strong>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
                     <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                      🍽️ Almuerzo:
+                      🍽️ Alm
                     </label>
                     {esPlanOInvitados ? (
                       <input
@@ -1085,9 +1101,9 @@ function App() {
                       renderBotones(opcionesAlmuerzo, dia, 'Almuerzo')
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', margin: '12px 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
                     <label style={{ minWidth: 100, marginRight: 12, fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                      🌙 Cena:
+                      🌙 Cena
                     </label>
                     {esPlanOInvitados ? (
                       <input
