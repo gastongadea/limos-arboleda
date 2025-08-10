@@ -54,7 +54,9 @@
     "inscripción",
     "react",
     "localstorage",
-    "github-pages"
+    "github-pages",
+    "pwa",
+    "progressive-web-app"
   ],
   "author": "Gastón Gadea",
   "license": "MIT",

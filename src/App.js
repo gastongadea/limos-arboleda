@@ -11,6 +11,7 @@ import GoogleSheetsDemo from './components/GoogleSheetsDemo';
 import SheetDiagnostic from './components/SheetDiagnostic';
 import SheetStructureValidator from './components/SheetStructureValidator';
 import SyncDebugger from './components/SyncDebugger';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
 Modal.setAppElement('#root');
@@ -2521,6 +2522,9 @@ function App() {
           </button>
         </div>
       </Modal>
+
+      {/* Componente PWA para instalación */}
+      <PWAInstallPrompt />
 
       </div>
     </>
