@@ -580,7 +580,7 @@ function App() {
       // setIsLoading(false); // Variable no utilizada
       setActualizandoComidas(false);
     }
-  }, [iniciales, dias, seleccion, mostrarMensaje]);
+  }, [iniciales, dias, seleccion, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales]);
 
   const handleCambioIniciales = useCallback((ini) => {
     // Si se presiona el botón ya seleccionado, deseleccionar
@@ -597,7 +597,112 @@ function App() {
     // Si hay cambios pendientes, preguntar antes de cambiar
     if (tieneCambios) {
       if (window.confirm('¿Querés guardar los cambios antes de cambiar de usuario?')) {
-        handleSubmit();
+        // Usar una función local para evitar dependencias circulares
+        const guardarCambios = async () => {
+          if (!iniciales || !validarIniciales(iniciales)) {
+            mostrarMensaje('Por favor selecciona un usuario válido', 'error');
+            return;
+          }
+          
+          setMensaje('');
+          setSyncErrors([]);
+          
+          const tipoUsuario = deducirTipoUsuario(iniciales);
+          let guardados = 0;
+          let errores = [];
+          
+          try {
+            // Obtener datos existentes de Google Sheets para comparar
+            let datosExistentes = {};
+            if (googleSheetsService.isConfigured()) {
+              try {
+                datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
+              } catch (error) {
+                console.warn('No se pudieron obtener datos existentes de Google Sheets:', error);
+              }
+            }
+            
+            for (const dia of dias) {
+              for (const comida of ['Almuerzo', 'Cena']) {
+                const opcion = seleccion[dia]?.[comida] || '';
+                // Procesar tanto comidas marcadas como desmarcadas
+                const inscripcion = {
+                  fecha: dia,
+                  comida,
+                  iniciales,
+                  tipoUsuario,
+                  opcion,
+                };
+                
+                // Verificar si el valor ha cambiado
+                const valorExistente = datosExistentes[dia]?.[comida] || '';
+                const haCambiado = valorExistente !== opcion;
+                
+                // Solo guardar en localStorage si hay un valor o si había un valor antes
+                if (opcion || valorExistente) {
+                  console.log('💾 Guardando inscripción:', inscripcion);
+                  if (localStorageService.saveInscripcion(inscripcion)) {
+                    guardados++;
+                    console.log('✅ Inscripción guardada localmente:', inscripcion);
+                  } else {
+                    errores.push(`Error al guardar ${dia} ${comida} localmente`);
+                    console.log('❌ Error al guardar localmente:', inscripcion);
+                  }
+                  
+                  // Guardar en Google Sheets solo si ha cambiado
+                  if (googleSheetsService.isConfigured() && haCambiado) {
+                    try {
+                      console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorExistente}")`);
+                      await googleSheetsService.saveInscripcion(inscripcion);
+                      console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
+                    } catch (error) {
+                      console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
+                      errores.push(`Error en ${dia} ${comida}: ${error.message}`);
+                    }
+                  } else if (googleSheetsService.isConfigured() && !haCambiado) {
+                    console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
+                  }
+                }
+              }
+            }
+            
+            if (guardados > 0) {
+              setSyncStatus(errores.length > 0 ? 'Guardado con algunos errores' : 'Sincronizado correctamente');
+              setTieneCambios(false);
+              
+              // Limpiar el mensaje de sincronización después de 3 segundos
+              setTimeout(() => {
+                setSyncStatus('');
+              }, 3000);
+              
+              // Actualizar detección de usuarios sin comidas DESPUÉS de guardar
+              setTimeout(() => {
+                detectarUsuariosSinComidasHoy();
+              }, 100);
+              
+              // Actualizar resumen de comensales si está visible
+              if (showComensales) {
+                setTimeout(() => {
+                  calcularResumenComensales();
+                }, 200);
+              }
+            } else {
+              mostrarMensaje('No hay cambios para guardar.', 'info');
+            }
+            
+            if (errores.length > 0) {
+              setSyncErrors(errores);
+            }
+          } catch (error) {
+            console.error('Error al guardar cambios:', error);
+            mostrarMensaje('Error al guardar cambios: ' + error.message, 'error');
+            setSyncErrors([`Error general: ${error.message}`]);
+          } finally {
+            setActualizandoComidas(false);
+          }
+        };
+        
+        guardarCambios();
       }
     }
     setSeleccion({});
@@ -606,7 +711,7 @@ function App() {
     setShowComensales(false);
     setSyncErrors([]);
     setActualizandoComidas(false);
-  }, [tieneCambios, iniciales, handleSubmit]);
+  }, [tieneCambios, iniciales, dias, seleccion, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales]);
 
   const handleOpenConfig = useCallback(() => {
     setShowConfig(true);
