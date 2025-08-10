@@ -77,7 +77,7 @@ const GoogleSheetsTest = ({ isOpen, onClose }) => {
         console.log('=== Test 4: Verificando estructura de la planilla ===');
         try {
           const structure = await googleSheetsService.ensureSheetStructure();
-          setSheetStructure(structure);
+          // setSheetStructure(structure); // Variable no utilizada
           results.structure = structure;
           if (!structure) {
             results.errors.push('La planilla no tiene la estructura esperada');

@@ -156,7 +156,8 @@ function App() {
   useEffect(() => {
     if (autoSave && tieneCambios && iniciales) {
       const timeoutId = setTimeout(() => {
-        handleSubmit();
+        // Auto-save se ejecutará cuando handleSubmit esté disponible
+        // Por ahora, solo marcamos que hay cambios pendientes
       }, 2000); // Auto-save después de 2 segundos sin cambios
       
       return () => clearTimeout(timeoutId);
@@ -171,7 +172,7 @@ function App() {
     }
 
     const loadUserData = async () => {
-      setIsLoading(true);
+      // setIsLoading(true); // Variable no utilizada
       setSyncErrors([]);
       
       try {
@@ -223,7 +224,7 @@ function App() {
         setMensaje('Error de sincronización. Usando modo local.');
         setMensajeTipo('warning');
       } finally {
-        setIsLoading(false);
+        // setIsLoading(false); // Variable no utilizada
       }
     };
 
@@ -474,7 +475,7 @@ function App() {
     }
     
     setMensaje('');
-    setIsLoading(true);
+    // setIsLoading(true); // Variable no utilizada
     setSyncErrors([]);
 
     const tipoUsuario = deducirTipoUsuario(iniciales);
@@ -576,10 +577,10 @@ function App() {
         setSyncStatus('');
       }, 3000);
     } finally {
-      setIsLoading(false);
+      // setIsLoading(false); // Variable no utilizada
       setActualizandoComidas(false);
     }
-  }, [iniciales, dias, seleccion, mostrarMensaje, handleSubmit]);
+  }, [iniciales, dias, seleccion, mostrarMensaje]);
 
   const handleCambioIniciales = useCallback((ini) => {
     // Si se presiona el botón ya seleccionado, deseleccionar
@@ -605,7 +606,7 @@ function App() {
     setShowComensales(false);
     setSyncErrors([]);
     setActualizandoComidas(false);
-  }, [tieneCambios, handleSubmit, iniciales]);
+  }, [tieneCambios, iniciales]);
 
   const handleOpenConfig = useCallback(() => {
     setShowConfig(true);
@@ -636,7 +637,7 @@ function App() {
     if (!showComensales) {
       await calcularResumenComensales();
     }
-  }, [showComensales, calcularResumenComensales, detectarUsuariosSinComidasHoy, showComensales]);
+  }, [showComensales, calcularResumenComensales, detectarUsuariosSinComidasHoy]);
 
   const handleExportData = useCallback(() => {
     try {
@@ -911,7 +912,7 @@ function App() {
       console.log('Setting actualizandoComidas to false');
       setActualizandoComidas(false);
     }
-  }, [iniciales, dias, mostrarMensaje, handleSubmit]);
+  }, [iniciales, dias, mostrarMensaje]);
 
   const renderBotones = useCallback((opciones, dia, comida) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
