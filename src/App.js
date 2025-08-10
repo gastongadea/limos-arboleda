@@ -71,6 +71,10 @@ function App() {
   const [iniciales, setIniciales] = useState('');
   const [dias, setDias] = useState([]);
   const [seleccion, setSeleccion] = useState({});
+  const [datosOriginales, setDatosOriginales] = useState({}); // Nuevo estado para datos originales
+  
+  // Log de inicialización
+  console.log('🔄 App - datosOriginales inicializado:', {});
   const [mensaje, setMensaje] = useState('');
   const [mensajeTipo, setMensajeTipo] = useState('info'); // 'info', 'success', 'error', 'warning'
   
@@ -98,6 +102,8 @@ function App() {
   const [autoSave] = useState(true); // setAutoSave no se usa // Siempre activo
   const [showStats, setShowStats] = useState(false);
   const [showGoogleSheetsTest, setShowGoogleSheetsTest] = useState(false);
+  const [showHoy, setShowHoy] = useState(false);
+  const [datosHoy, setDatosHoy] = useState({ almuerzo: [], cena: [] });
   const [showGoogleSheetsAPITest, setShowGoogleSheetsAPITest] = useState(false);
   const [showGoogleSheetsDemo, setShowGoogleSheetsDemo] = useState(false);
   const [showSheetDiagnostic, setShowSheetDiagnostic] = useState(false);
@@ -152,17 +158,7 @@ function App() {
     cargarUsuarios();
   }, []);
 
-  // Auto-save cuando hay cambios
-  useEffect(() => {
-    if (autoSave && tieneCambios && iniciales) {
-      const timeoutId = setTimeout(() => {
-        // Auto-save se ejecutará cuando handleSubmit esté disponible
-        // Por ahora, solo marcamos que hay cambios pendientes
-      }, 2000); // Auto-save después de 2 segundos sin cambios
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [seleccion, autoSave, tieneCambios, iniciales]);
+
 
   // Cargar selección al cambiar iniciales
   useEffect(() => {
@@ -206,7 +202,10 @@ function App() {
           setSyncStatus('');
         }
         
+        console.log('🔄 loadUserData - Datos cargados:', nuevaSel);
         setSeleccion(nuevaSel);
+        setDatosOriginales(nuevaSel); // Guardar datos originales por separado
+        console.log('🔄 loadUserData - datosOriginales establecidos:', nuevaSel);
         setTieneCambios(false);
         setActualizandoComidas(false);
         
@@ -415,13 +414,402 @@ function App() {
     }
   }, [dias, detectarUsuariosSinComidasHoy]);
 
-  const handleChange = useCallback((dia, comida, valor) => {
-    if (!validarOpcion(valor, comida)) {
-      mostrarMensaje(`Opción inválida para ${comida}`, 'error');
+  // Función auxiliar para obtener la particularidad en formato correcto
+  const obtenerParticularidad = useCallback((opcion) => {
+    if (!opcion) return '';
+    const mapeo = {
+      'V': ' (V)',
+      '12': ' (12)',
+      'T': ' (T)',
+      'RT': ' (RT)',
+      'VRM': ' (VRM)'
+    };
+    return mapeo[opcion] || '';
+  }, []);
+
+  // Función para obtener los datos de hoy
+  const obtenerDatosHoy = useCallback(async () => {
+    try {
+      const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      const almuerzo = [];
+      const cena = [];
+
+      console.log('Obteniendo datos de Google Sheets para hoy...');
+      
+      // Obtener datos de Google Sheets (todos los usuarios)
+      const sheetData = await googleSheetsService.getSheetData(true); // forceRefresh = true para datos frescos
+      console.log('Datos de Google Sheets:', sheetData);
+
+      if (!sheetData || sheetData.length === 0) {
+        throw new Error('No se pudieron obtener datos de Google Sheets');
+      }
+
+      // La primera fila son los headers
+      const headers = sheetData[0];
+      console.log('Headers de la hoja:', headers);
+
+      // Encontrar las columnas importantes
+      const fechaColIndex = headers.findIndex(header => header === 'Fecha');
+      const comidaColIndex = headers.findIndex(header => header === 'Comida');
+      
+      if (fechaColIndex === -1 || comidaColIndex === -1) {
+        throw new Error('No se encontraron las columnas Fecha o Comida en la hoja');
+      }
+
+      // Filtrar solo las filas de hoy
+      const filasHoy = sheetData.slice(1).filter(row => {
+        const fechaFila = row[fechaColIndex];
+        if (!fechaFila) return false;
+        
+        // DEBUG: Mostrar las primeras fechas para entender el formato
+        if (sheetData.indexOf(row) <= 5) {
+          console.log(`Fila ${sheetData.indexOf(row)} - Fecha: "${fechaFila}" (tipo: ${typeof fechaFila})`);
+        }
+        
+        // Convertir fecha de la hoja a formato YYYY-MM-DD
+        let fechaFormateada;
+        try {
+          if (fechaFila.includes('/')) {
+            // Formato DD/M/YY o DD/MM/YYYY
+            const partes = fechaFila.split('/');
+            if (partes.length === 3) {
+              const dia = partes[0];
+              const mes = partes[1];
+              let anio = partes[2];
+              
+              // Si el año tiene solo 2 dígitos, asumir siglo 21
+              if (anio.length === 2) {
+                anio = '20' + anio;
+              }
+              
+              fechaFormateada = `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+            } else {
+              console.warn('Formato de fecha inesperado:', fechaFila);
+              return false;
+            }
+          } else if (fechaFila.includes('-')) {
+            // Formato YYYY-MM-DD
+            fechaFormateada = fechaFila;
+          } else {
+            // Intentar parsear como Date
+            const fecha = new Date(fechaFila);
+            fechaFormateada = fecha.toISOString().split('T')[0];
+          }
+          
+          // DEBUG: Mostrar la conversión
+          if (sheetData.indexOf(row) <= 5) {
+            console.log(`  -> Convertida a: "${fechaFormateada}"`);
+            console.log(`  -> Comparando con hoy: "${hoy}"`);
+            console.log(`  -> ¿Son iguales? ${fechaFormateada === hoy}`);
+          }
+        } catch (error) {
+          console.warn('Error al parsear fecha:', fechaFila, error);
+          return false;
+        }
+        
+        return fechaFormateada === hoy;
+      });
+
+      console.log('Filas de hoy encontradas:', filasHoy);
+
+      // DEBUG: Inspeccionar las filas de hoy
+      filasHoy.forEach((row, index) => {
+        console.log(`Fila de hoy ${index + 1}:`, {
+          fecha: row[fechaColIndex],
+          comida: row[comidaColIndex],
+          valores: row.slice(3), // Columnas después de Código, Fecha, Comida
+          headers: headers.slice(3)
+        });
+      });
+
+      // Procesar cada fila para extraer inscripciones
+      filasHoy.forEach(row => {
+        const comida = row[comidaColIndex];
+        if (!comida) return;
+
+        // DEBUG: Mostrar qué valores hay en las columnas de usuarios
+        console.log(`Procesando fila con comida: "${comida}"`);
+        console.log('Valores en columnas de usuarios:', row.slice(3).map((valor, index) => ({
+          iniciales: headers[3 + index],
+          valor: valor
+        })));
+
+        // Buscar en todas las columnas (después de las columnas de fecha y comida)
+        for (let colIndex = Math.max(fechaColIndex, comidaColIndex) + 1; colIndex < row.length; colIndex++) {
+          const valor = row[colIndex];
+          const iniciales = headers[colIndex];
+          
+          if (valor && iniciales && valor !== '') {
+            // Determinar la opción basándose en el valor
+            let opcion = '';
+            if (valor === 'V' || valor === 'v') opcion = 'V';
+            else if (valor === '12') opcion = '12';
+            else if (valor === 'T' || valor === 't') opcion = 'T';
+            else if (valor === 'RT' || valor === 'rt') opcion = 'RT';
+            else if (valor === 'VRM' || valor === 'vrm') opcion = 'VRM';
+            else if (valor === 'S' || valor === 's' || valor === 'N' || valor === 'n' || valor === 'R' || valor === 'r') {
+              opcion = valor.toUpperCase();
+            }
+
+            const inscripcion = {
+              iniciales: iniciales,
+              opcion: opcion,
+              comida: comida
+            };
+
+            // Comparar con abreviaciones y nombres completos
+            if (comida === 'Almuerzo' || comida === 'A' || comida === 'a') {
+              almuerzo.push(inscripcion);
+            } else if (comida === 'Cena' || comida === 'C' || comida === 'c') {
+              cena.push(inscripcion);
+            }
+          }
+        }
+      });
+
+      console.log('Inscripciones de almuerzo encontradas:', almuerzo);
+      console.log('Inscripciones de cena encontradas:', cena);
+
+      // Función para ordenar según las reglas especificadas
+      const ordenarInscripciones = (inscripciones) => {
+        const orden = { 'V': 1, '12': 2, 'S': 3, 'R': 3, 'N': 3, 'T': 4, 'RT': 4, 'VRM': 4 };
+        return inscripciones.sort((a, b) => {
+          const ordenA = orden[a.opcion] || 5;
+          const ordenB = orden[b.opcion] || 5;
+          if (ordenA !== ordenB) return ordenA - ordenB;
+          return a.iniciales.localeCompare(b.iniciales);
+        });
+      };
+
+      // Ordenar y formatear almuerzo
+      const almuerzoOrdenado = ordenarInscripciones(almuerzo);
+      const almuerzoFormateado = almuerzoOrdenado.map(inscripcion => {
+        const particularidad = obtenerParticularidad(inscripcion.opcion);
+        return `${inscripcion.iniciales}${particularidad}`;
+      });
+
+      // Ordenar y formatear cena
+      const cenaOrdenada = ordenarInscripciones(cena);
+      const cenaFormateada = cenaOrdenada.map(inscripcion => {
+        const particularidad = obtenerParticularidad(inscripcion.opcion);
+        return `${inscripcion.iniciales}${particularidad}`;
+      });
+
+      console.log('Almuerzo formateado:', almuerzoFormateado);
+      console.log('Cena formateada:', cenaFormateada);
+
+      setDatosHoy({ almuerzo: almuerzoFormateado, cena: cenaFormateada });
+      setShowHoy(true);
+    } catch (error) {
+      console.error('Error al obtener datos de hoy:', error);
+      mostrarMensaje('Error al obtener datos de hoy: ' + error.message, 'error');
+    }
+  }, [mostrarMensaje, obtenerParticularidad]);
+
+  const handleSubmit = useCallback(async (e) => {
+    if (e) e.preventDefault();
+    
+    console.log('🚀 handleSubmit iniciado');
+    
+    if (!iniciales || !validarIniciales(iniciales)) {
+      console.log('❌ Validación fallida - iniciales:', iniciales);
+      mostrarMensaje('Por favor selecciona un usuario válido', 'error');
       return;
     }
     
-    // Si se presiona el botón ya seleccionado, borrar la selección
+    console.log('✅ Validación exitosa, procediendo con guardado...');
+    console.log('📊 Datos originales:', datosOriginales);
+    console.log('📊 Estado actual seleccion:', seleccion);
+    console.log('🔍 DEBUG - Comparación detallada:');
+    Object.keys(seleccion).forEach(dia => {
+      console.log(`  ${dia}:`, {
+        original: datosOriginales[dia],
+        actual: seleccion[dia],
+        almuerzoCambio: datosOriginales[dia]?.Almuerzo !== seleccion[dia]?.Almuerzo,
+        cenaCambio: datosOriginales[dia]?.Cena !== seleccion[dia]?.Cena
+      });
+    });
+    setMensaje('');
+    // setIsLoading(true); // Variable no utilizada
+    setSyncErrors([]);
+    
+    // Activar estado de actualización
+    setActualizandoComidas(true);
+    setSyncStatus('Actualizando cambios...');
+
+    const tipoUsuario = deducirTipoUsuario(iniciales);
+    let guardados = 0;
+    // let registrosGuardados = 0; // Variable no utilizada
+    let errores = [];
+
+    try {
+      console.log('🔄 Obteniendo datos existentes de Google Sheets...');
+      // Obtener datos existentes de Google Sheets para comparar
+      let datosExistentes = {};
+      const config = googleSheetsService.isConfigured();
+      console.log(`🔍 DEBUG - Google Sheets configurado para lectura:`, config);
+      if (config.read) {
+        try {
+          datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
+          console.log('✅ Datos existentes obtenidos:', datosExistentes);
+        } catch (error) {
+          console.warn('⚠️ No se pudieron obtener datos existentes de Google Sheets:', error);
+        }
+      } else {
+        console.log('ℹ️ Google Sheets no está configurado, solo guardando localmente');
+      }
+      
+      console.log('🔄 Procesando días y comidas...');
+      for (const dia of dias) {
+        for (const comida of ['Almuerzo', 'Cena']) {
+          const opcion = seleccion[dia]?.[comida] || '';
+          console.log(`📝 Procesando ${dia} ${comida}: "${opcion}"`);
+          
+          // Procesar tanto comidas marcadas como desmarcadas
+          const inscripcion = {
+            fecha: dia,
+            comida,
+            iniciales,
+            tipoUsuario,
+            opcion,
+          };
+          
+          // Verificar si el valor ha cambiado comparando con datos originales
+          const valorOriginal = datosOriginales[dia]?.[comida] || '';
+          const haCambiado = valorOriginal !== opcion;
+          console.log(`🔄 ${dia} ${comida} - Cambió: ${haCambiado} (era: "${valorOriginal}", ahora: "${opcion}")`);
+          console.log(`🔍 DEBUG - datosOriginales[${dia}]:`, datosOriginales[dia]);
+          console.log(`🔍 DEBUG - seleccion[${dia}]:`, seleccion[dia]);
+          
+          // Solo guardar en localStorage si hay un valor o si había un valor antes
+          if (opcion || valorOriginal) {
+            console.log('💾 Guardando inscripción:', inscripcion);
+            if (localStorageService.saveInscripcion(inscripcion)) {
+              guardados++;
+              console.log('✅ Inscripción guardada localmente:', inscripcion);
+            } else {
+              errores.push(`Error al guardar ${dia} ${comida} localmente`);
+              console.log('❌ Error al guardar localmente:', inscripcion);
+            }
+            
+            // Verificar configuración de Google Sheets
+            const config = googleSheetsService.isConfigured();
+            console.log(`🔍 DEBUG - Google Sheets configurado:`, config);
+            
+            // Guardar en Google Sheets solo si ha cambiado
+            if (config.write && haCambiado) {
+              try {
+                console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorOriginal}")`);
+                await googleSheetsService.saveInscripcion(inscripcion);
+                console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
+                
+                // Actualizar datos originales SOLO para esta comida específica después de sincronizar exitosamente
+                setDatosOriginales(prev => ({
+                  ...prev,
+                  [dia]: {
+                    ...prev[dia],
+                    [comida]: opcion
+                  }
+                }));
+                
+                // registrosGuardados++; // Variable no utilizada
+              } catch (error) {
+                console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
+                errores.push(`Error en ${dia} ${comida}: ${error.message}`);
+              }
+            } else if (googleSheetsService.isConfigured() && !haCambiado) {
+              console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
+            }
+          } else {
+            console.log(`⏭️ ${dia} ${comida} - Sin valor, saltando...`);
+          }
+        }
+      }
+
+      console.log(`🎯 Procesamiento completado. Guardados: ${guardados}, Errores: ${errores.length}`);
+      
+      if (guardados > 0) {
+        // Mostrar mensaje de éxito brevemente
+        setSyncStatus(errores.length > 0 ? 'Guardado con algunos errores' : 'Sincronizado correctamente');
+        setTieneCambios(false);
+        
+        // NO actualizar datos originales aquí - deben mantenerse para futuras comparaciones
+        // setDatosOriginales(seleccion);
+        
+        // Limpiar el mensaje de sincronización después de 2 segundos
+        setTimeout(() => {
+          setSyncStatus('');
+        }, 2000);
+        
+        // Actualizar detección de usuarios sin comidas DESPUÉS de guardar
+        setTimeout(() => {
+          detectarUsuariosSinComidasHoy();
+        }, 100);
+        
+        // Actualizar resumen de comensales si está visible
+        if (showComensales) {
+          setTimeout(() => {
+            calcularResumenComensales();
+          }, 200);
+        }
+      } else {
+        mostrarMensaje('No hay cambios para guardar.', 'info');
+        // Si no hay cambios, limpiar inmediatamente el estado de actualización
+        setSyncStatus('');
+      }
+      
+      if (errores.length > 0) {
+        setSyncErrors(errores);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error al guardar:', error);
+      mostrarMensaje('Error al guardar los datos.', 'error');
+      setSyncStatus('Error de sincronización');
+      
+      // Limpiar el mensaje de error después de 3 segundos
+      setTimeout(() => {
+        setSyncStatus('');
+      }, 3000);
+    } finally {
+      console.log('🏁 handleSubmit finalizado - estableciendo actualizandoComidas en false');
+      // setIsLoading(false); // Variable no utilizada
+      setActualizandoComidas(false);
+      console.log('✅ actualizandoComidas establecido en false');
+      
+      // Si no hay mensaje de error o éxito, limpiar el estado de sincronización
+      if (!syncStatus || syncStatus === 'Actualizando cambios...') {
+        setSyncStatus('');
+      }
+    }
+  }, [iniciales, dias, seleccion, datosOriginales, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales]);
+
+  // Auto-save cuando hay cambios
+  useEffect(() => {
+    if (autoSave && tieneCambios && iniciales) {
+      const timeoutId = setTimeout(() => {
+        console.log('🔄 Auto-save ejecutándose después de 2 segundos...');
+        handleSubmit();
+      }, 2000); // Auto-save después de 2 segundos sin cambios
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [seleccion, autoSave, tieneCambios, iniciales, handleSubmit]);
+
+  const handleChange = useCallback((dia, comida, valor) => {
+    if (!iniciales) {
+      mostrarMensaje('Selecciona un usuario primero', 'error');
+      return;
+    }
+
+    if (!validarOpcion(valor, comida)) {
+      mostrarMensaje('Opción no válida para esta comida', 'error');
+      return;
+    }
+
+    console.log(`🔄 handleChange: ${dia} ${comida} - Valor anterior: "${seleccion[dia]?.[comida] || ''}", Nuevo valor: "${valor}"`);
+
+    // Si se presiona el mismo botón, desmarcar
     if (seleccion[dia]?.[comida] === valor) {
       setSeleccion((prev) => ({
         ...prev,
@@ -441,8 +829,16 @@ function App() {
       }));
     }
     setTieneCambios(true);
-    setActualizandoComidas(true);
-  }, [mostrarMensaje, seleccion]);
+    setActualizandoComidas(false); // Cambiar a false para permitir guardar
+    
+    console.log('✅ handleChange completado - tieneCambios establecido en true, actualizandoComidas en false');
+    
+    // NO llamar automáticamente a handleSubmit - dejar que el usuario guarde manualmente
+    // console.log('🔄 Cambio detectado, guardando automáticamente...');
+    // setTimeout(() => {
+    //   handleSubmit();
+    // }, 100); // Pequeño delay para asegurar que el estado se actualice
+  }, [mostrarMensaje, seleccion, iniciales]);
 
   const handleInputChange = useCallback((dia, comida, valor) => {
     // Validar que sea un número para Plan e Invitados
@@ -466,121 +862,7 @@ function App() {
 
 
 
-  const handleSubmit = useCallback(async (e) => {
-    if (e) e.preventDefault();
-    
-    if (!iniciales || !validarIniciales(iniciales)) {
-      mostrarMensaje('Por favor selecciona un usuario válido', 'error');
-      return;
-    }
-    
-    setMensaje('');
-    // setIsLoading(true); // Variable no utilizada
-    setSyncErrors([]);
 
-    const tipoUsuario = deducirTipoUsuario(iniciales);
-    let guardados = 0;
-    // let registrosGuardados = 0; // Variable no utilizada
-    let errores = [];
-
-    try {
-      // Obtener datos existentes de Google Sheets para comparar
-      let datosExistentes = {};
-      if (googleSheetsService.isConfigured()) {
-        try {
-          datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
-        } catch (error) {
-          console.warn('No se pudieron obtener datos existentes de Google Sheets:', error);
-        }
-      }
-      
-      for (const dia of dias) {
-        for (const comida of ['Almuerzo', 'Cena']) {
-          const opcion = seleccion[dia]?.[comida] || '';
-          // Procesar tanto comidas marcadas como desmarcadas
-          const inscripcion = {
-            fecha: dia,
-            comida,
-            iniciales,
-            tipoUsuario,
-            opcion,
-          };
-          
-          // Verificar si el valor ha cambiado
-          const valorExistente = datosExistentes[dia]?.[comida] || '';
-          const haCambiado = valorExistente !== opcion;
-          
-          // Solo guardar en localStorage si hay un valor o si había un valor antes
-          if (opcion || valorExistente) {
-            console.log('💾 Guardando inscripción:', inscripcion);
-            if (localStorageService.saveInscripcion(inscripcion)) {
-              guardados++;
-              console.log('✅ Inscripción guardada localmente:', inscripcion);
-            } else {
-              errores.push(`Error al guardar ${dia} ${comida} localmente`);
-              console.log('❌ Error al guardar localmente:', inscripcion);
-            }
-            
-            // Guardar en Google Sheets solo si ha cambiado
-            if (googleSheetsService.isConfigured() && haCambiado) {
-              try {
-                console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorExistente}")`);
-                await googleSheetsService.saveInscripcion(inscripcion);
-                console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
-                // registrosGuardados++; // Variable no utilizada
-              } catch (error) {
-                console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
-                errores.push(`Error en ${dia} ${comida}: ${error.message}`);
-              }
-            } else if (googleSheetsService.isConfigured() && !haCambiado) {
-              console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
-            }
-          }
-        }
-      }
-
-      if (guardados > 0) {
-        setSyncStatus(errores.length > 0 ? 'Guardado con algunos errores' : 'Sincronizado correctamente');
-        setTieneCambios(false);
-        
-        // Limpiar el mensaje de sincronización después de 3 segundos
-        setTimeout(() => {
-          setSyncStatus('');
-        }, 3000);
-        
-        // Actualizar detección de usuarios sin comidas DESPUÉS de guardar
-        setTimeout(() => {
-          detectarUsuariosSinComidasHoy();
-        }, 100);
-        
-        // Actualizar resumen de comensales si está visible
-        if (showComensales) {
-          setTimeout(() => {
-            calcularResumenComensales();
-          }, 200);
-        }
-      } else {
-        mostrarMensaje('No hay cambios para guardar.', 'info');
-      }
-      
-      if (errores.length > 0) {
-        setSyncErrors(errores);
-      }
-      
-    } catch (error) {
-      console.error('Error al guardar:', error);
-      mostrarMensaje('Error al guardar los datos.', 'error');
-      setSyncStatus('Error de sincronización');
-      
-      // Limpiar el mensaje de error después de 3 segundos
-      setTimeout(() => {
-        setSyncStatus('');
-      }, 3000);
-    } finally {
-      // setIsLoading(false); // Variable no utilizada
-      setActualizandoComidas(false);
-    }
-  }, [iniciales, dias, seleccion, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales]);
 
   const handleCambioIniciales = useCallback((ini) => {
     // Si se presiona el botón ya seleccionado, deseleccionar
@@ -737,12 +1019,12 @@ function App() {
     }
   }, [adminClave]);
 
-  // const handleMostrarComensales = useCallback(async () => {
-  //   setShowComensales(v => !v);
-  //   if (!showComensales) {
-  //     await calcularResumenComensales();
-  //   }
-  // }, [showComensales, calcularResumenComensales]);
+  const handleMostrarComensales = useCallback(async () => {
+    setShowComensales(v => !v);
+    if (!showComensales) {
+      await calcularResumenComensales();
+    }
+  }, [showComensales, calcularResumenComensales]);
 
   const handleExportData = useCallback(() => {
     try {
@@ -1190,9 +1472,48 @@ function App() {
           </a>
 
           {!iniciales ? (
-            <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
-              👥 Selecciona tus iniciales
-            </h3>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              width: '100%'
+            }}>
+              <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
+                👥 Selecciona tus iniciales
+              </h3>
+              
+              {/* Botón Hoy - solo visible cuando se muestran todas las iniciales */}
+              <button
+                type="button"
+                style={{
+                  fontSize: '13px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #ff6b35',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  background: 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)',
+                  color: 'white',
+                  boxShadow: '0 4px 16px rgba(255, 107, 53, 0.2)',
+                  transform: 'translateY(-1px)',
+                  fontWeight: 'bold',
+                }}
+                onClick={obtenerDatosHoy}
+                title="Ver anotados para hoy"
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #e55a2b 0%, #ff6b35 100%)';
+                  e.target.style.transform = 'translateY(-3px)';
+                  e.target.style.boxShadow = '0 8px 24px rgba(255, 107, 53, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)';
+                  e.target.style.transform = 'translateY(-1px)';
+                  e.target.style.boxShadow = '0 4px 16px rgba(255, 107, 53, 0.2)';
+                }}
+              >
+                Hoy
+              </button>
+            </div>
           ) : (
             <div style={{ 
               display: 'flex', 
@@ -1233,6 +1554,8 @@ function App() {
               >
                 {iniciales}
               </button>
+
+
 
               {/* Mensajes de estado en el centro */}
               <div style={{
@@ -1452,25 +1775,29 @@ function App() {
           })}
         </div>
 
-        {/* Botones ocultos - Comentados temporalmente
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 16 }}>
+        {/* Botones de acción - OCULTOS */}
+        {/* <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 16 }}>
           <button 
             type="button" 
-            onClick={handleSubmit} 
-            disabled={!iniciales || isLoading} 
+            onClick={() => {
+              console.log('🖱️ Botón Guardar cambios clickeado');
+              console.log('🔍 Estado actual - tieneCambios:', tieneCambios, 'actualizandoComidas:', actualizandoComidas);
+              handleSubmit();
+            }} 
+            disabled={!iniciales || actualizandoComidas} 
             style={{ 
               padding: '10px 20px', 
               fontSize: 16, 
               fontWeight: 'bold', 
-              background: isLoading ? '#ccc' : '#1976d2', 
+              background: actualizandoComidas ? '#ccc' : (tieneCambios ? '#f57c00' : '#1976d2'), 
               color: 'white', 
               border: 'none', 
               borderRadius: 4, 
-              cursor: (iniciales && !isLoading) ? 'pointer' : 'not-allowed',
+              cursor: (iniciales && !actualizandoComidas) ? 'pointer' : 'not-allowed',
               transition: 'all 0.2s ease',
             }}
           >
-            {isLoading ? 'Guardando...' : 'Guardar inscripción'}
+            {actualizandoComidas ? 'Guardando...' : (tieneCambios ? '💾 Guardar cambios' : 'Guardar cambios')}
           </button>
           <button 
             type="button" 
@@ -1488,8 +1815,19 @@ function App() {
           >
             {showComensales ? 'Ocultar comensales' : 'Comensales'}
           </button>
-        </div>
-        */}
+          {tieneCambios && (
+            <span style={{ 
+              color: '#f57c00', 
+              fontSize: '14px', 
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              ⚠️ Cambios pendientes
+            </span>
+          )}
+        </div> */}
         
         {/* Estado de sincronización (solo mostrar si hay problemas) */}
         {!googleSheetsService.isConfigured() && (
@@ -1503,14 +1841,15 @@ function App() {
         )}
         
         {/* Estado de sincronización */}
-        {syncStatus && (
+        {(syncStatus || actualizandoComidas) && (
           <div style={{ 
             fontSize: '14px', 
-            color: syncStatus.includes('Error') ? 'var(--error-color)' : 'var(--primary-color)',
+            color: syncStatus.includes('Error') ? 'var(--error-color)' : 
+                   actualizandoComidas ? 'var(--accent-color)' : 'var(--primary-color)',
             marginBottom: '8px',
             fontWeight: 'bold'
           }}>
-            {syncStatus}
+            {actualizandoComidas ? 'Actualizando cambios...' : syncStatus}
           </div>
         )}
         
@@ -1885,6 +2224,151 @@ function App() {
         isOpen={showSheetStructureValidator} 
         onClose={() => setShowSheetStructureValidator(false)} 
       />
+
+      {/* Modal para mostrar datos de hoy */}
+      <Modal
+        isOpen={showHoy}
+        onRequestClose={() => setShowHoy(false)}
+        style={{
+          content: {
+            top: '50%',
+            left: '50%',
+            right: 'auto',
+            bottom: 'auto',
+            marginRight: '-50%',
+            transform: 'translate(-50%, -50%)',
+            width: '500px',
+            maxWidth: '90vw',
+            background: 'var(--card-background)',
+            border: '2px solid var(--primary-color)',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+          },
+          overlay: {
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(5px)',
+          },
+        }}
+        contentLabel="Anotados para hoy"
+      >
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ 
+            color: 'var(--primary-color)', 
+            marginBottom: '24px',
+            fontSize: '24px',
+            fontWeight: 'bold'
+          }}>
+            📅 Anotados para hoy
+          </h2>
+          
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '20px',
+            marginBottom: '24px'
+          }}>
+            {/* Almuerzo */}
+            <div style={{
+              padding: '16px',
+              background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+              border: '2px solid #4caf50',
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(76, 175, 80, 0.2)'
+            }}>
+              <h3 style={{ 
+                color: '#2e7d32', 
+                margin: '0 0 12px 0',
+                fontSize: '18px',
+                fontWeight: 'bold'
+              }}>
+                🍽️ Almuerzo
+              </h3>
+              {datosHoy.almuerzo.length > 0 ? (
+                <div style={{
+                  fontSize: '16px',
+                  color: '#2e7d32',
+                  fontWeight: '500',
+                  lineHeight: '1.6'
+                }}>
+                  {datosHoy.almuerzo.join(', ')}
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: '16px',
+                  color: '#666',
+                  fontStyle: 'italic'
+                }}>
+                  No hay anotados para almuerzo
+                </div>
+              )}
+            </div>
+            
+            {/* Cena */}
+            <div style={{
+              padding: '16px',
+              background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+              border: '2px solid #ff9800',
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(255, 152, 0, 0.2)'
+            }}>
+              <h3 style={{ 
+                color: '#e65100', 
+                margin: '0 0 12px 0',
+                fontSize: '18px',
+                fontWeight: 'bold'
+              }}>
+                🌙 Cena
+              </h3>
+              {datosHoy.cena.length > 0 ? (
+                <div style={{
+                  fontSize: '16px',
+                  color: '#e65100',
+                  fontWeight: '500',
+                  lineHeight: '1.6'
+                }}>
+                  {datosHoy.cena.join(', ')}
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: '16px',
+                  color: '#666',
+                  fontStyle: 'italic'
+                }}>
+                  No hay anotados para cena
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <button 
+            type="button" 
+            onClick={() => setShowHoy(false)} 
+            style={{
+              padding: '12px 24px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              background: 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.2)';
+            }}
+          >
+            Cerrar
+          </button>
+        </div>
+      </Modal>
 
       </div>
     </>
