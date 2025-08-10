@@ -480,7 +480,7 @@ function App() {
 
     const tipoUsuario = deducirTipoUsuario(iniciales);
     let guardados = 0;
-    let registrosGuardados = 0; // Contador para registros guardados en Google Sheets
+    // let registrosGuardados = 0; // Variable no utilizada
     let errores = [];
 
     try {
@@ -527,7 +527,7 @@ function App() {
                 console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorExistente}")`);
                 await googleSheetsService.saveInscripcion(inscripcion);
                 console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
-                registrosGuardados++; // Solo contar los que realmente se guardaron
+                // registrosGuardados++; // Variable no utilizada
               } catch (error) {
                 console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
                 errores.push(`Error en ${dia} ${comida}: ${error.message}`);
@@ -606,7 +606,7 @@ function App() {
     setShowComensales(false);
     setSyncErrors([]);
     setActualizandoComidas(false);
-  }, [tieneCambios, iniciales]);
+  }, [tieneCambios, iniciales, handleSubmit]);
 
   const handleOpenConfig = useCallback(() => {
     setShowConfig(true);
@@ -632,12 +632,12 @@ function App() {
     }
   }, [adminClave]);
 
-  const handleMostrarComensales = useCallback(async () => {
-    setShowComensales(v => !v);
-    if (!showComensales) {
-      await calcularResumenComensales();
-    }
-  }, [showComensales, calcularResumenComensales, detectarUsuariosSinComidasHoy]);
+  // const handleMostrarComensales = useCallback(async () => {
+  //   setShowComensales(v => !v);
+  //   if (!showComensales) {
+  //     await calcularResumenComensales();
+  //   }
+  // }, [showComensales, calcularResumenComensales]);
 
   const handleExportData = useCallback(() => {
     try {
@@ -912,7 +912,7 @@ function App() {
       console.log('Setting actualizandoComidas to false');
       setActualizandoComidas(false);
     }
-  }, [iniciales, dias, mostrarMensaje]);
+  }, [iniciales, dias, mostrarMensaje, handleSubmit, seleccion]);
 
   const renderBotones = useCallback((opciones, dia, comida) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>

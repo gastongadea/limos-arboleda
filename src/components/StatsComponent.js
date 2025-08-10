@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import localStorageService from '../services/localStorageService';
 import { formatearFecha, getDiasSiguientes, esFinDeSemana } from '../utils/dateUtils';
 
@@ -8,17 +8,54 @@ const StatsComponent = ({ isOpen, onClose }) => {
   const [selectedPeriod, setSelectedPeriod] = useState('7dias');
   const [selectedUser, setSelectedUser] = useState('todos');
 
-  useEffect(() => {
-    if (isOpen) {
-      loadStats();
-    }
-  }, [isOpen, selectedPeriod, selectedUser]);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     setLoading(true);
     try {
       const allStats = localStorageService.getStats();
       const storageInfo = localStorageService.getStorageInfo();
+      
+      // Helper functions moved inside to avoid dependency issues
+      const filterStatsByPeriod = (allStats, period) => {
+        const inscripciones = localStorageService.getInscripciones();
+        let diasFiltro;
+        
+        switch (period) {
+          case '7dias':
+            diasFiltro = getDiasSiguientes(7);
+            break;
+          case '30dias':
+            diasFiltro = getDiasSiguientes(30);
+            break;
+          case 'mes':
+            const hoy = new Date();
+            const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+            const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+            diasFiltro = getDiasSiguientes(
+              ultimoDiaMes.getDate(),
+              primerDiaMes.toISOString().split('T')[0]
+            );
+            break;
+          default:
+            diasFiltro = getDiasSiguientes(7);
+        }
+        
+        const inscripcionesFiltradas = inscripciones.filter(item => 
+          diasFiltro.includes(item.fecha)
+        );
+        
+        return calculateStatsFromInscripciones(inscripcionesFiltradas);
+      };
+
+      const filterStatsByUser = (periodStats, user) => {
+        if (user === 'todos') return periodStats;
+        
+        const inscripciones = localStorageService.getInscripciones();
+        const inscripcionesUsuario = inscripciones.filter(item => 
+          item.iniciales === user
+        );
+        
+        return calculateStatsFromInscripciones(inscripcionesUsuario);
+      };
       
       // Filtrar por período
       const periodStats = filterStatsByPeriod(allStats, selectedPeriod);
@@ -37,49 +74,15 @@ const StatsComponent = ({ isOpen, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedPeriod, selectedUser]);
 
-  const filterStatsByPeriod = (allStats, period) => {
-    const inscripciones = localStorageService.getInscripciones();
-    let diasFiltro;
-    
-    switch (period) {
-      case '7dias':
-        diasFiltro = getDiasSiguientes(7);
-        break;
-      case '30dias':
-        diasFiltro = getDiasSiguientes(30);
-        break;
-      case 'mes':
-        const hoy = new Date();
-        const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-        const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-        diasFiltro = getDiasSiguientes(
-          ultimoDiaMes.getDate(),
-          primerDiaMes.toISOString().split('T')[0]
-        );
-        break;
-      default:
-        diasFiltro = getDiasSiguientes(7);
+  useEffect(() => {
+    if (isOpen) {
+      loadStats();
     }
-    
-    const inscripcionesFiltradas = inscripciones.filter(item => 
-      diasFiltro.includes(item.fecha)
-    );
-    
-    return calculateStatsFromInscripciones(inscripcionesFiltradas);
-  };
+  }, [isOpen, loadStats]);
 
-  const filterStatsByUser = (periodStats, user) => {
-    if (user === 'todos') return periodStats;
-    
-    const inscripciones = localStorageService.getInscripciones();
-    const inscripcionesUsuario = inscripciones.filter(item => 
-      item.iniciales === user
-    );
-    
-    return calculateStatsFromInscripciones(inscripcionesUsuario);
-  };
+
 
   const calculateStatsFromInscripciones = (inscripciones) => {
     const stats = {

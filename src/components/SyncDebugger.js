@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import googleSheetsService from '../services/googleSheetsService';
 
 const SyncDebugger = ({ isOpen, onClose, syncStatus, syncErrors, useGoogleSheets, iniciales, seleccion }) => {
   const [debugInfo, setDebugInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const runDebug = async () => {
+  const runDebug = useCallback(async () => {
     setLoading(true);
     setDebugInfo(null);
 
@@ -74,13 +74,13 @@ const SyncDebugger = ({ isOpen, onClose, syncStatus, syncErrors, useGoogleSheets
     } finally {
       setLoading(false);
     }
-  };
+  }, [useGoogleSheets, iniciales, seleccion, syncStatus, syncErrors]);
 
   useEffect(() => {
     if (isOpen) {
       runDebug();
     }
-  }, [isOpen, syncStatus, syncErrors, useGoogleSheets, iniciales, seleccion]);
+  }, [isOpen, syncStatus, syncErrors, useGoogleSheets, iniciales, seleccion, runDebug]);
 
   if (!isOpen) return null;
 

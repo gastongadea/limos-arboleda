@@ -160,24 +160,24 @@ class GoogleSheetsService {
         throw new Error('Service Account no configurado');
       }
 
-      // Crear JWT para Service Account
-      const header = {
-        alg: 'RS256',
-        typ: 'JWT'
-      };
+      // Crear JWT para Service Account (no utilizado actualmente)
+      // const header = {
+      //   alg: 'RS256',
+      //   typ: 'JWT'
+      // };
 
-      const now = Math.floor(Date.now() / 1000);
-      const payload = {
-        iss: this.serviceAccountEmail,
-        scope: 'https://www.googleapis.com/auth/spreadsheets',
-        aud: 'https://oauth2.googleapis.com/token',
-        exp: now + 3600, // 1 hora
-        iat: now
-      };
+      // const now = Math.floor(Date.now() / 1000);
+      // const payload = {
+      //   iss: this.serviceAccountEmail,
+      //   scope: 'https://www.googleapis.com/auth/spreadsheets',
+      //   aud: 'https://oauth2.googleapis.com/token',
+      //   exp: now + 3600, // 1 hora
+      //   iat: now
+      // };
 
       // Codificar JWT (simplificado - en producción usar librería)
-      const encodedHeader = btoa(JSON.stringify(header));
-      const encodedPayload = btoa(JSON.stringify(payload));
+      // const encodedHeader = btoa(JSON.stringify(header)); // Variable no utilizada
+      // const encodedPayload = btoa(JSON.stringify(payload)); // Variable no utilizada
       // const signatureInput = `${encodedHeader}.${encodedPayload}`; // Variable no utilizada
       
       // Nota: En un entorno real, necesitarías una librería para firmar JWT
@@ -622,7 +622,7 @@ class GoogleSheetsService {
       }
       
       // Usar Google Apps Script para crear la fila
-      const result = await this.callGoogleAppsScript('createRow', {
+      await this.callGoogleAppsScript('createRow', {
         rowData: newRow,
         sheetName: 'Data' // Intentar con hoja "Data" primero
       });
