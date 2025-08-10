@@ -782,7 +782,7 @@ function App() {
         setSyncStatus('');
       }
     }
-  }, [iniciales, dias, seleccion, datosOriginales, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales]);
+  }, [iniciales, dias, seleccion, datosOriginales, mostrarMensaje, detectarUsuariosSinComidasHoy, calcularResumenComensales, showComensales, syncStatus]);
 
   // Auto-save cuando hay cambios
   useEffect(() => {
@@ -1019,12 +1019,7 @@ function App() {
     }
   }, [adminClave]);
 
-  const handleMostrarComensales = useCallback(async () => {
-    setShowComensales(v => !v);
-    if (!showComensales) {
-      await calcularResumenComensales();
-    }
-  }, [showComensales, calcularResumenComensales]);
+
 
   const handleExportData = useCallback(() => {
     try {
