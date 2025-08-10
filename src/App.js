@@ -624,7 +624,7 @@ function App() {
       console.error('Error al obtener datos de hoy:', error);
       mostrarMensaje('Error al obtener datos de hoy: ' + error.message, 'error');
     }
-  }, [mostrarMensaje, obtenerParticularidad, contarOpcionesValidas]);
+  }, [mostrarMensaje, obtenerParticularidad]);
 
   const handleSubmit = useCallback(async (e) => {
     if (e) e.preventDefault();
