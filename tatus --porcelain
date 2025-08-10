@@ -1,0 +1,3 @@
+.env
+src/App.js
+src/services/localStorageService.js

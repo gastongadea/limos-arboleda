@@ -133,7 +133,7 @@ class LocalStorageService {
     
     // Verificar campos requeridos
     for (const field of required) {
-      if (!inscripcion[field]) {
+      if (inscripcion[field] === undefined || inscripcion[field] === null) {
         console.error(`Campo requerido faltante: ${field}`);
         return false;
       }

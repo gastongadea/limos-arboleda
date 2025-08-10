@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import Modal from 'react-modal';
 import localStorageService from './services/localStorageService';
 import googleSheetsService from './services/googleSheetsService';
-import { formatearFecha, esFinDeSemana } from './utils/dateUtils';
+import { formatearFecha, esFinDeSemana, agregarDias, diferenciaDias } from './utils/dateUtils';
 import StatsComponent from './components/StatsComponent';
 import GoogleSheetsTest from './components/GoogleSheetsTest';
 import GoogleSheetsAPITest from './components/GoogleSheetsAPITest';
@@ -91,6 +92,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [syncErrors, setSyncErrors] = useState([]);
+  const [actualizandoComidas, setActualizandoComidas] = useState(false);
   
   // Estados de UI
   const [autoSave, setAutoSave] = useState(true); // Siempre activo
@@ -205,11 +207,17 @@ function App() {
         
         setSeleccion(nuevaSel);
         setTieneCambios(false);
+        setActualizandoComidas(false);
         
       } catch (error) {
         console.error('Error al cargar datos:', error);
         setSyncStatus('Error al cargar datos');
         setSyncErrors(prev => [...prev, error.message]);
+        
+        // Limpiar el mensaje de error después de 3 segundos
+        setTimeout(() => {
+          setSyncStatus('');
+        }, 3000);
         
         // Fallback a localStorage si Google Sheets falla
         setMensaje('Error de sincronización. Usando modo local.');
@@ -432,6 +440,7 @@ function App() {
       }));
     }
     setTieneCambios(true);
+    setActualizandoComidas(true);
   }, [mostrarMensaje, seleccion]);
 
   const handleInputChange = useCallback((dia, comida, valor) => {
@@ -530,13 +539,13 @@ function App() {
       }
 
       if (guardados > 0) {
-        const mensaje = googleSheetsService.isConfigured() 
-          ? `¡Inscripción guardada! ${guardados} registros guardados localmente${registrosGuardados > 0 ? `, ${registrosGuardados} sincronizados con Google Sheets` : ', sin cambios en Google Sheets'}.`
-          : `¡Inscripción guardada! ${guardados} registros guardados localmente.`;
-        
-        mostrarMensaje(mensaje, 'success');
         setSyncStatus(errores.length > 0 ? 'Guardado con algunos errores' : 'Sincronizado correctamente');
         setTieneCambios(false);
+        
+        // Limpiar el mensaje de sincronización después de 3 segundos
+        setTimeout(() => {
+          setSyncStatus('');
+        }, 3000);
         
         // Actualizar detección de usuarios sin comidas DESPUÉS de guardar
         setTimeout(() => {
@@ -561,8 +570,14 @@ function App() {
       console.error('Error al guardar:', error);
       mostrarMensaje('Error al guardar los datos.', 'error');
       setSyncStatus('Error de sincronización');
+      
+      // Limpiar el mensaje de error después de 3 segundos
+      setTimeout(() => {
+        setSyncStatus('');
+      }, 3000);
     } finally {
       setIsLoading(false);
+      setActualizandoComidas(false);
     }
   }, [iniciales, dias, seleccion, mostrarMensaje]);
 
@@ -574,6 +589,7 @@ function App() {
       setMensaje('');
       setShowComensales(false);
       setSyncErrors([]);
+      setActualizandoComidas(false);
       return;
     }
     
@@ -588,6 +604,7 @@ function App() {
     setMensaje('');
     setShowComensales(false);
     setSyncErrors([]);
+    setActualizandoComidas(false);
   }, [tieneCambios, handleSubmit, iniciales]);
 
   const handleOpenConfig = useCallback(() => {
@@ -671,6 +688,230 @@ function App() {
       }
     }
   }, [mostrarMensaje]);
+
+  // Copiar selección de los primeros 7 días a los siguientes 7 días
+  const handleRepetirSemana = useCallback(async () => {
+    console.log('=== handleRepetirSemana START ===');
+    console.log('Function called at:', new Date().toISOString());
+    console.log('Current iniciales:', iniciales);
+    console.log('Current dias:', dias);
+    console.log('Current seleccion:', seleccion);
+    
+    // Declarar tipoUsuario al inicio para evitar errores de inicialización
+    const tipoUsuario = deducirTipoUsuario(iniciales);
+    console.log('Deduced tipoUsuario:', tipoUsuario);
+    
+    try {
+      if (!iniciales || !validarIniciales(iniciales)) {
+        console.log('Validation failed - iniciales:', iniciales, 'valid:', validarIniciales(iniciales));
+        mostrarMensaje('Selecciona un usuario válido primero', 'error');
+        return;
+      }
+
+      console.log('Setting actualizandoComidas to true');
+      setActualizandoComidas(true);
+
+      // 1) Obtener inscripciones del usuario desde almacenamiento (pueden incluir días pasados)
+      console.log('Getting inscriptions for user:', iniciales);
+      const inscripcionesUsuario = localStorageService.getInscripcionesByIniciales(iniciales) || [];
+      console.log('Found inscriptions:', inscripcionesUsuario.length);
+      if (inscripcionesUsuario.length === 0) {
+        console.log('No inscriptions found, showing warning');
+        mostrarMensaje('No hay inscripciones previas para copiar', 'warning');
+        return;
+      }
+
+      // 2) Armar mapa fecha -> { Almuerzo, Cena } desde LocalStorage
+      const porFecha = {};
+      for (const item of inscripcionesUsuario) {
+        const fechaISO = item.fecha;
+        if (!porFecha[fechaISO]) porFecha[fechaISO] = { Almuerzo: '', Cena: '' };
+        if (item.comida === 'Almuerzo') porFecha[fechaISO].Almuerzo = item.opcion ?? '';
+        if (item.comida === 'Cena') porFecha[fechaISO].Cena = item.opcion ?? '';
+      }
+
+      // 2.b) Si Google Sheets está configurado para lectura, fusionar con histórico de Sheets (incluye días pasados no visibles)
+      try {
+        const cfg = googleSheetsService.isConfigured();
+        if (cfg && cfg.read) {
+          const sheetData = await googleSheetsService.getSheetData();
+          const userCol = googleSheetsService.findUserColumn(sheetData, iniciales);
+          if (userCol) {
+            for (let row = 1; row < sheetData.length; row++) {
+              const rowData = sheetData[row];
+              if (!rowData || rowData.length < 3) continue;
+              const fechaISO = googleSheetsService.parseDate(rowData[1]);
+              const tipo = rowData[2] ? rowData[2].toString().trim().toUpperCase() : '';
+              if (!fechaISO || (tipo !== 'A' && tipo !== 'C')) continue;
+              const valor = rowData[userCol.col] ? rowData[userCol.col].toString().trim() : '';
+              if (!porFecha[fechaISO]) porFecha[fechaISO] = { Almuerzo: '', Cena: '' };
+              if (valor !== '') {
+                if (tipo === 'A') porFecha[fechaISO].Almuerzo = porFecha[fechaISO].Almuerzo || valor;
+                if (tipo === 'C') porFecha[fechaISO].Cena = porFecha[fechaISO].Cena || valor;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('No se pudieron leer inscripciones históricas de Google Sheets:', e);
+      }
+
+      // 3) Fechas con alguna selección hecha
+      console.log('Processing dates with selections');
+      const fechasOrdenadas = Object.keys(porFecha).sort(); // ISO ordena cronológicamente
+      const fechasConSeleccion = fechasOrdenadas.filter(f => {
+        const v = porFecha[f];
+        return (v.Almuerzo ?? '') !== '' || (v.Cena ?? '') !== '';
+      });
+      console.log('Dates with selections:', fechasConSeleccion.length, 'of', fechasOrdenadas.length);
+      console.log('All dates with selections:', fechasConSeleccion);
+
+      if (fechasConSeleccion.length < 7) {
+        console.log('Not enough days with selections, showing warning');
+        mostrarMensaje('Necesitas al menos 7 días con selección para repetir', 'warning');
+        return;
+      }
+
+      // 4) Últimos 7 con selección como origen
+      const origenDias = fechasConSeleccion.slice(-7);
+      const ultimaFechaOrigen = origenDias[origenDias.length - 1];
+      console.log('=== ORIGIN DATES ANALYSIS ===');
+      console.log('Last 7 dates with selections (origenDias):', origenDias);
+      console.log('Last date with selection (ultimaFechaOrigen):', ultimaFechaOrigen);
+      console.log('First date in origin (origenDias[0]):', origenDias[0]);
+      console.log('Origin date range:', `${origenDias[0]} to ${ultimaFechaOrigen}`);
+
+      // 5) Encontrar los próximos 7 días consecutivos que estén vacíos
+      let destinos = [];
+      let fechaActual = agregarDias(ultimaFechaOrigen, 1); // Empezar desde el día siguiente
+      console.log('=== DESTINATION DATES ANALYSIS ===');
+      console.log('Starting search from date (ultimaFechaOrigen + 1):', fechaActual);
+      
+      // Cambio: En lugar de buscar días vacíos, tomar los próximos 7 días consecutivos
+      for (let i = 0; i < 7; i++) {
+        destinos.push(fechaActual);
+        console.log(`Added ${fechaActual} to destinations (day ${i + 1} after last selection)`);
+        fechaActual = agregarDias(fechaActual, 1);
+      }
+      
+      console.log('Final destination dates:', destinos);
+      console.log('Destination date range:', `${destinos[0]} to ${destinos[destinos.length - 1]}`);
+      
+      // Calculate the expected gap
+      const expectedGap = diferenciaDias(origenDias[0], destinos[0]);
+      console.log('Expected gap between origin and destination:', expectedGap, 'days');
+      console.log('This represents approximately', Math.round(expectedGap / 7), 'weeks');
+
+      // 6) Aplicar copia: persistir en storage y reflejar en UI para días visibles
+      console.log('Starting copy process...');
+      console.log('Origin dates:', origenDias);
+      console.log('Destination dates:', destinos);
+      
+      // Mostrar advertencia si se van a sobrescribir selecciones existentes
+      const diasConSeleccionesExistentes = destinos.filter(fecha => {
+        const diaExistente = localStorageService.getInscripcionesByDate(fecha);
+        return diaExistente && diaExistente.some(insc => 
+          insc.iniciales === iniciales && 
+          ((insc.comida === 'Almuerzo' && insc.opcion) || (insc.comida === 'Cena' && insc.opcion))
+        );
+      });
+      
+      if (diasConSeleccionesExistentes.length > 0) {
+        console.log('Warning: Will overwrite existing selections on dates:', diasConSeleccionesExistentes);
+        mostrarMensaje(`Advertencia: Se sobrescribirán selecciones existentes en ${diasConSeleccionesExistentes.length} días`, 'warning');
+      }
+      
+      flushSync(() => {
+        setSeleccion((prev) => {
+          const nueva = { ...prev };
+          for (let i = 0; i < destinos.length; i++) {
+            const srcFecha = origenDias[i];
+            const dstFecha = destinos[i];
+            const { Almuerzo, Cena } = porFecha[srcFecha] || { Almuerzo: '', Cena: '' };
+
+            console.log(`Copying from ${srcFecha} to ${dstFecha}: Almuerzo="${Almuerzo}", Cena="${Cena}"`);
+
+            if (dias.includes(dstFecha)) {
+              nueva[dstFecha] = { Almuerzo: Almuerzo ?? '', Cena: Cena ?? '' };
+              console.log(`Updated UI for ${dstFecha}`);
+            }
+
+            if ((Almuerzo ?? '') !== '') {
+              console.log(`Saving Almuerzo for ${dstFecha}: ${Almuerzo}`);
+              localStorageService.saveInscripcion({
+                fecha: dstFecha,
+                comida: 'Almuerzo',
+                iniciales,
+                tipoUsuario,
+                opcion: Almuerzo,
+              });
+            }
+            if ((Cena ?? '') !== '') {
+              console.log(`Saving Cena for ${dstFecha}: ${Cena}`);
+              localStorageService.saveInscripcion({
+                fecha: dstFecha,
+                comida: 'Cena',
+                iniciales,
+                tipoUsuario,
+                opcion: Cena,
+              });
+            }
+          }
+          return nueva;
+        });
+        setTieneCambios(true);
+      });
+
+      console.log('Successfully processed, saving to localStorage and calling handleSubmit');
+      mostrarMensaje(`Copiados 7 días a los siguientes 7 días consecutivos (${destinos[0]} a ${destinos[destinos.length - 1]}). Guardando...`, 'info');
+      
+      // Guardar directamente en localStorage para asegurar que se persistan todas las fechas
+      // (handleSubmit solo procesa las fechas visibles en el array 'dias')
+      let guardados = 0;
+      
+      for (let i = 0; i < destinos.length; i++) {
+        const srcFecha = origenDias[i];
+        const dstFecha = destinos[i];
+        const { Almuerzo, Cena } = porFecha[srcFecha] || { Almuerzo: '', Cena: '' };
+
+        if ((Almuerzo ?? '') !== '') {
+          console.log(`Saving Almuerzo for ${dstFecha}: ${Almuerzo}`);
+          if (localStorageService.saveInscripcion({
+            fecha: dstFecha,
+            comida: 'Almuerzo',
+            iniciales,
+            tipoUsuario,
+            opcion: Almuerzo,
+          })) {
+            guardados++;
+          }
+        }
+        if ((Cena ?? '') !== '') {
+          console.log(`Saving Cena for ${dstFecha}: ${Cena}`);
+          if (localStorageService.saveInscripcion({
+            fecha: dstFecha,
+            comida: 'Cena',
+            iniciales,
+            tipoUsuario,
+            opcion: Cena,
+          })) {
+            guardados++;
+          }
+        }
+      }
+      
+      console.log(`Successfully saved ${guardados} inscriptions to localStorage`);
+      
+      // Ahora llamar a handleSubmit para sincronizar con Google Sheets (solo para fechas visibles)
+      handleSubmit();
+    } catch (error) {
+      console.error('Error repitiendo semana:', error);
+      mostrarMensaje('Error al repetir la semana', 'error');
+    } finally {
+      console.log('Setting actualizandoComidas to false');
+      setActualizandoComidas(false);
+    }
+  }, [iniciales, dias, mostrarMensaje, handleSubmit]);
 
   const renderBotones = useCallback((opciones, dia, comida) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
@@ -812,7 +1053,14 @@ function App() {
           justifyContent: 'space-between', 
           alignItems: 'center',
           marginBottom: '2px',
-          padding: '0 10px'
+          padding: '0 10px',
+          position: 'sticky',
+          top: '0',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+          borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+          borderRadius: '0 0 12px 12px'
         }}>
           <a
             href="https://docs.google.com/spreadsheets/d/1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8/edit?gid=215982293"
@@ -835,9 +1083,142 @@ function App() {
             📊
           </a>
 
-          <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
-            👥 Selecciona tus iniciales
-          </h3>
+          {!iniciales ? (
+            <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
+              👥 Selecciona tus iniciales
+            </h3>
+          ) : (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              minHeight: '24px', // Mantener altura similar al mensaje
+              width: '100%'
+            }}>
+              {/* Botón de las iniciales seleccionadas */}
+              <button
+                type="button"
+                style={{
+                  position: 'relative',
+                  fontSize: '13px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #1976d2',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  background: 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)',
+                  color: 'white',
+                  boxShadow: '0 4px 16px rgba(25, 118, 210, 0.2)',
+                  transform: 'translateY(-1px)',
+                  fontWeight: 'bold',
+                }}
+                onClick={() => handleCambioIniciales(iniciales)}
+                title="Cambiar iniciales"
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)';
+                  e.target.style.transform = 'translateY(-3px)';
+                  e.target.style.boxShadow = '0 8px 24px rgba(25, 118, 210, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)';
+                  e.target.style.transform = 'translateY(-1px)';
+                  e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                }}
+              >
+                {iniciales}
+              </button>
+
+              {/* Mensajes de estado en el centro */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                flex: 1,
+                margin: '0 16px'
+              }}>
+                {actualizandoComidas && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '8px 16px',
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                    border: '2px solid #1976d2',
+                    borderRadius: '8px',
+                    color: '#1976d2',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    boxShadow: '0 2px 8px rgba(25, 118, 210, 0.2)',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    🔄 Actualizando comidas...
+                  </div>
+                )}
+                
+                {syncStatus && syncStatus.includes('Sincronizado') && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '8px 16px',
+                    background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+                    border: '2px solid #4caf50',
+                    borderRadius: '8px',
+                    color: '#2e7d32',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    ✅ Sincronización completada
+                  </div>
+                )}
+              </div>
+              
+              {/* Botón Repetir 7 días */}
+              <button
+                type="button"
+                onClick={() => {
+                  console.log('=== Repetir 7 días button clicked ===');
+                  console.log('Click event timestamp:', new Date().toISOString());
+                  console.log('About to call handleRepetirSemana...');
+                  handleRepetirSemana();
+                  console.log('handleRepetirSemana called successfully');
+                }}
+                title="Copiar los últimos 7 días con selección a los próximos 7"
+                style={{
+                  display: 'none', // Botón oculto temporalmente
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #e8d5c4',
+                  background: 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+                  color: '#2c1810',
+                  fontWeight: 'normal',
+                  boxShadow: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+                  e.target.style.borderColor = '#1976d2';
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+                  e.target.style.transform = 'none';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <span style={{ lineHeight: 1.1, textAlign: 'center' }}>Repetir</span>
+                <span style={{ fontSize: 12, opacity: 0.95 }}>7 días</span>
+              </button>
+            </div>
+          )}
 
           <button
             onClick={handleOpenConfig}
@@ -876,6 +1257,7 @@ function App() {
         zIndex: 10, 
         paddingBottom: 8, 
         marginBottom: 8,
+        marginTop: '8px',
         background: 'var(--card-background)',
         backdropFilter: 'blur(10px)'
       }}>
@@ -888,7 +1270,7 @@ function App() {
           {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
-            const mostrarBoton = !iniciales || esSeleccionado; // Solo mostrar si no hay selección o es el seleccionado
+            const mostrarBoton = !iniciales; // Solo mostrar si no hay selección de iniciales
             
             if (!mostrarBoton) return null;
             
