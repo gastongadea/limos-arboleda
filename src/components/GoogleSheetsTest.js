@@ -5,7 +5,7 @@ const GoogleSheetsTest = ({ isOpen, onClose }) => {
   const [testResults, setTestResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sheetInfo, setSheetInfo] = useState(null);
-  const [sheetStructure, setSheetStructure] = useState(null);
+  // const [sheetStructure, setSheetStructure] = useState(null); // Variable no utilizada
 
   useEffect(() => {
     if (isOpen) {

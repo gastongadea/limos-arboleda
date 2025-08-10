@@ -89,13 +89,13 @@ function App() {
 
   
   // Estados de carga y sincronización
-  const [isLoading, setIsLoading] = useState(false);
+  // const [isLoading, setIsLoading] = useState(false); // Variable no utilizada
   const [syncStatus, setSyncStatus] = useState('');
   const [syncErrors, setSyncErrors] = useState([]);
   const [actualizandoComidas, setActualizandoComidas] = useState(false);
   
   // Estados de UI
-  const [autoSave, setAutoSave] = useState(true); // Siempre activo
+  const [autoSave] = useState(true); // setAutoSave no se usa // Siempre activo
   const [showStats, setShowStats] = useState(false);
   const [showGoogleSheetsTest, setShowGoogleSheetsTest] = useState(false);
   const [showGoogleSheetsAPITest, setShowGoogleSheetsAPITest] = useState(false);
@@ -579,7 +579,7 @@ function App() {
       setIsLoading(false);
       setActualizandoComidas(false);
     }
-  }, [iniciales, dias, seleccion, mostrarMensaje]);
+  }, [iniciales, dias, seleccion, mostrarMensaje, handleSubmit]);
 
   const handleCambioIniciales = useCallback((ini) => {
     // Si se presiona el botón ya seleccionado, deseleccionar
@@ -636,7 +636,7 @@ function App() {
     if (!showComensales) {
       await calcularResumenComensales();
     }
-  }, [showComensales, calcularResumenComensales]);
+  }, [showComensales, calcularResumenComensales, detectarUsuariosSinComidasHoy, showComensales]);
 
   const handleExportData = useCallback(() => {
     try {

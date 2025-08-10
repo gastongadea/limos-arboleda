@@ -2,12 +2,12 @@
 const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Configuración
-const CONFIG = {
-  ZONA_HORARIA: 'America/Argentina/Buenos_Aires',
-  FORMATO_FECHA: 'DD/MM/YYYY',
-  FORMATO_ISO: 'YYYY-MM-DD'
-};
+// Configuración (no utilizada actualmente)
+// const CONFIG = {
+//   ZONA_HORARIA: 'America/Argentina/Buenos_Aires',
+//   FORMATO_FECHA: 'DD/MM/YYYY',
+//   FORMATO_ISO: 'YYYY-MM-DD'
+// };
 
 /**
  * Formatear fecha ISO a formato legible

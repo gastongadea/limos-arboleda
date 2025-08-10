@@ -178,7 +178,7 @@ class GoogleSheetsService {
       // Codificar JWT (simplificado - en producción usar librería)
       const encodedHeader = btoa(JSON.stringify(header));
       const encodedPayload = btoa(JSON.stringify(payload));
-      const signatureInput = `${encodedHeader}.${encodedPayload}`;
+      // const signatureInput = `${encodedHeader}.${encodedPayload}`; // Variable no utilizada
       
       // Nota: En un entorno real, necesitarías una librería para firmar JWT
       // Por ahora, usaremos un enfoque alternativo

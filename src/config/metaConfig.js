@@ -33,6 +33,9 @@ class MetaConfig {
         case 'app-version':
           config.REACT_APP_VERSION = value;
           break;
+        default:
+          // Ignorar meta tags no reconocidos
+          break;
       }
     });
 
