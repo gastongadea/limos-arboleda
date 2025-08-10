@@ -90,7 +90,7 @@ function App() {
   const [diasResumen, setDiasResumen] = useState([]);
   const [tieneCambios, setTieneCambios] = useState(false);
   const [showDataManager, setShowDataManager] = useState(false);
-
+  const [mostrandoAnotadosHoy, setMostrandoAnotadosHoy] = useState(false);
   
   // Estados de carga y sincronización
   // const [isLoading, setIsLoading] = useState(false); // Variable no utilizada
@@ -422,9 +422,19 @@ function App() {
       '12': ' (12)',
       'T': ' (T)',
       'RT': ' (RT)',
-      'VRM': ' (VRM)'
+      'VRM': ' (VRM)',
+      'R': ' (R)'
     };
     return mapeo[opcion] || '';
+  }, []);
+
+  // Función auxiliar para contar solo las opciones válidas (excluyendo No y VRM)
+  const contarOpcionesValidas = useCallback((inscripciones) => {
+    return inscripciones.filter(inscripcion => {
+      const opcion = inscripcion.opcion;
+      // Contar V, 12, T, RT, S (Sandwich), R (Vianda) - excluir N (No) y VRM
+      return ['V', '12', 'T', 'RT', 'S', 'R'].includes(opcion);
+    }).length;
   }, []);
 
   // Función para obtener los datos de hoy
@@ -581,30 +591,40 @@ function App() {
         });
       };
 
-      // Ordenar y formatear almuerzo
+      // Ordenar y formatear almuerzo (excluir los que tienen opción "N")
       const almuerzoOrdenado = ordenarInscripciones(almuerzo);
-      const almuerzoFormateado = almuerzoOrdenado.map(inscripcion => {
-        const particularidad = obtenerParticularidad(inscripcion.opcion);
-        return `${inscripcion.iniciales}${particularidad}`;
-      });
+      const almuerzoFormateado = almuerzoOrdenado
+        .filter(inscripcion => inscripcion.opcion !== 'N')
+        .map(inscripcion => {
+          const particularidad = obtenerParticularidad(inscripcion.opcion);
+          return `${inscripcion.iniciales}${particularidad}`;
+        });
 
-      // Ordenar y formatear cena
+      // Ordenar y formatear cena (excluir los que tienen opción "N")
       const cenaOrdenada = ordenarInscripciones(cena);
-      const cenaFormateada = cenaOrdenada.map(inscripcion => {
-        const particularidad = obtenerParticularidad(inscripcion.opcion);
-        return `${inscripcion.iniciales}${particularidad}`;
-      });
+      const cenaFormateada = cenaOrdenada
+        .filter(inscripcion => inscripcion.opcion !== 'N')
+        .map(inscripcion => {
+          const particularidad = obtenerParticularidad(inscripcion.opcion);
+          return `${inscripcion.iniciales}${particularidad}`;
+        });
 
       console.log('Almuerzo formateado:', almuerzoFormateado);
       console.log('Cena formateada:', cenaFormateada);
 
-      setDatosHoy({ almuerzo: almuerzoFormateado, cena: cenaFormateada });
-      setShowHoy(true);
+      setDatosHoy({ 
+        almuerzo: almuerzoFormateado, 
+        cena: cenaFormateada,
+        almuerzoInscripciones: almuerzoOrdenado,
+        cenaInscripciones: cenaOrdenada
+      });
+      setMostrandoAnotadosHoy(true);
+      setShowHoy(false);
     } catch (error) {
       console.error('Error al obtener datos de hoy:', error);
       mostrarMensaje('Error al obtener datos de hoy: ' + error.message, 'error');
     }
-  }, [mostrarMensaje, obtenerParticularidad]);
+  }, [mostrarMensaje, obtenerParticularidad, contarOpcionesValidas]);
 
   const handleSubmit = useCallback(async (e) => {
     if (e) e.preventDefault();
@@ -1477,37 +1497,39 @@ function App() {
                 👥 Selecciona tus iniciales
               </h3>
               
-              {/* Botón Hoy - solo visible cuando se muestran todas las iniciales */}
-              <button
-                type="button"
-                style={{
-                  fontSize: '13px',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  border: '2px solid #ff6b35',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  background: 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)',
-                  color: 'white',
-                  boxShadow: '0 4px 16px rgba(255, 107, 53, 0.2)',
-                  transform: 'translateY(-1px)',
-                  fontWeight: 'bold',
-                }}
-                onClick={obtenerDatosHoy}
-                title="Ver anotados para hoy"
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, #e55a2b 0%, #ff6b35 100%)';
-                  e.target.style.transform = 'translateY(-3px)';
-                  e.target.style.boxShadow = '0 8px 24px rgba(255, 107, 53, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)';
-                  e.target.style.transform = 'translateY(-1px)';
-                  e.target.style.boxShadow = '0 4px 16px rgba(255, 107, 53, 0.2)';
-                }}
-              >
-                Hoy
-              </button>
+              {/* Botón Hoy - solo visible cuando se muestran todas las iniciales y no se está mostrando la vista Hoy */}
+              {!mostrandoAnotadosHoy && (
+                <button
+                  type="button"
+                  style={{
+                    fontSize: '13px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '2px solid #ff6b35',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    background: 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)',
+                    color: 'white',
+                    boxShadow: '0 4px 16px rgba(255, 107, 53, 0.2)',
+                    transform: 'translateY(-1px)',
+                    fontWeight: 'bold',
+                  }}
+                  onClick={obtenerDatosHoy}
+                  title="Ver anotados para hoy"
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #e55a2b 0%, #ff6b35 100%)';
+                    e.target.style.transform = 'translateY(-3px)';
+                    e.target.style.boxShadow = '0 8px 24px rgba(255, 107, 53, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%)';
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(255, 107, 53, 0.2)';
+                  }}
+                >
+                  Hoy
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ 
@@ -1694,7 +1716,7 @@ function App() {
           {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
-            const mostrarBoton = !iniciales; // Solo mostrar si no hay selección de iniciales
+            const mostrarBoton = !iniciales && !mostrandoAnotadosHoy; // Solo mostrar si no hay selección de iniciales y no se está mostrando la vista Hoy
             
             if (!mostrarBoton) return null;
             
@@ -1769,6 +1791,141 @@ function App() {
             );
           })}
         </div>
+
+        {/* Vista de Anotados para Hoy */}
+        {mostrandoAnotadosHoy && (
+          <div style={{
+            marginTop: '16px',
+            padding: '20px',
+            background: 'var(--card-background)',
+            border: '2px solid var(--primary-color)',
+            borderRadius: '12px',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px'
+            }}>
+              <h3 style={{ 
+                margin: 0, 
+                color: 'var(--primary-color)', 
+                fontSize: '18px',
+                fontWeight: 'bold'
+              }}>
+                📅 Anotados para hoy
+              </h3>
+              
+              <button
+                type="button"
+                onClick={() => setMostrandoAnotadosHoy(false)}
+                style={{
+                  fontSize: '13px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: '2px solid #666',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  background: 'linear-gradient(135deg, #666 0%, #999 100%)',
+                  color: 'white',
+                  fontWeight: 'bold',
+                }}
+                title="Volver a selección de iniciales"
+              >
+                ← Volver
+              </button>
+            </div>
+            
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '16px'
+            }}>
+              {/* Almuerzo */}
+              <div style={{
+                padding: '16px',
+                background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+                border: '2px solid #4caf50',
+                borderRadius: '8px',
+                boxShadow: '0 4px 16px rgba(76, 175, 80, 0.2)'
+              }}>
+                <h4 style={{ 
+                  color: '#2e7d32', 
+                  margin: '0 0 12px 0',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}>
+                                     🍽️ Almuerzo <span style={{ 
+                     fontSize: '14px', 
+                     color: '#1b5e20', 
+                     fontWeight: 'normal',
+                     opacity: '0.8'
+                   }}>({datosHoy.almuerzoInscripciones ? contarOpcionesValidas(datosHoy.almuerzoInscripciones) : datosHoy.almuerzo.length})</span>
+                </h4>
+                {datosHoy.almuerzo.length > 0 ? (
+                  <div style={{
+                    fontSize: '15px',
+                    color: '#2e7d32',
+                    fontWeight: '500',
+                    lineHeight: '1.6'
+                  }}>
+                    {datosHoy.almuerzo.join(', ')}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: '15px',
+                    color: '#666',
+                    fontStyle: 'italic'
+                  }}>
+                    No hay anotados para almuerzo
+                  </div>
+                )}
+              </div>
+              
+              {/* Cena */}
+              <div style={{
+                padding: '16px',
+                background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                border: '2px solid #ff9800',
+                borderRadius: '8px',
+                boxShadow: '0 4px 16px rgba(255, 152, 0, 0.2)'
+              }}>
+                <h4 style={{ 
+                  color: '#e65100', 
+                  margin: '0 0 12px 0',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}>
+                                     🌙 Cena <span style={{ 
+                     fontSize: '14px', 
+                     color: '#bf360c', 
+                     fontWeight: 'normal',
+                     opacity: '0.8'
+                   }}>({datosHoy.cenaInscripciones ? contarOpcionesValidas(datosHoy.cenaInscripciones) : datosHoy.cena.length})</span>
+                </h4>
+                {datosHoy.cena.length > 0 ? (
+                  <div style={{
+                    fontSize: '15px',
+                    color: '#e65100',
+                    fontWeight: '500',
+                    lineHeight: '1.6'
+                  }}>
+                    {datosHoy.cena.join(', ')}
+                  </div>
+                ) : (
+                  <div style={{
+                    fontSize: '15px',
+                    color: '#666',
+                    fontStyle: 'italic'
+                  }}>
+                    No hay anotados para cena
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Botones de acción - OCULTOS */}
         {/* <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: 16 }}>
