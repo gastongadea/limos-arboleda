@@ -30,7 +30,7 @@ const opcionesAlmuerzo = [
 const opcionesCena = [
   { valor: 'S', label: 'S' },
   { valor: 'N', label: 'N' },
-  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', 'VM'] },
+  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', 'VM', ''] },
   { valor: 'T', label: 'T' },
 ];
 
@@ -1735,7 +1735,7 @@ function App() {
                   }
                 }}
               >
-                Régimen
+                R
               </button>
 
 
@@ -1764,7 +1764,7 @@ function App() {
                     boxShadow: '0 2px 8px rgba(25, 118, 210, 0.2)',
                     whiteSpace: 'nowrap'
                   }}>
-                    🔄 Actualizando comidas...
+                    🔄 Esperá...
                   </div>
                 )}
                 
@@ -2229,8 +2229,8 @@ function App() {
                     </strong>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
-                    <label style={{ minWidth: 80, marginRight: 6, fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                      🍽️ Alm
+                    <label style={{ minWidth: 50, marginRight: 4, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      Alm
                     </label>
                     {esPlanOInvitados ? (
                       <input
@@ -2246,8 +2246,8 @@ function App() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0' }}>
-                    <label style={{ minWidth: 80, marginRight: 6, fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                      🌙 Cena
+                    <label style={{ minWidth: 50, marginRight: 4, fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      Cena
                     </label>
                     {esPlanOInvitados ? (
                       <input
