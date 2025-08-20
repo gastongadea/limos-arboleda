@@ -11,7 +11,6 @@ import GoogleSheetsDemo from './components/GoogleSheetsDemo';
 import SheetDiagnostic from './components/SheetDiagnostic';
 import SheetStructureValidator from './components/SheetStructureValidator';
 import SyncDebugger from './components/SyncDebugger';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
 Modal.setAppElement('#root');
@@ -21,24 +20,18 @@ const inicialesLista = [
 ];
 
 const opcionesAlmuerzo = [
-  { valor: 'S', label: 'Si' },
-  { valor: 'R', label: 'Reg' },
-  { valor: 'N', label: 'No' },
-  { valor: '12', label: '12' },
-  { valor: 'V', label: 'Vian' },
-  { valor: 'San', label: 'San' },
+  { valor: 'S', label: 'S' },
+  { valor: 'N', label: 'N' },
+  { valor: '12', label: '12', ciclo: ['12', '12:30', ''] },
+  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', ''] },
   { valor: 'T', label: 'T' },
-  { valor: 'RT', label: 'Reg T' },
 ];
 
 const opcionesCena = [
-  { valor: 'S', label: 'Si' },
-  { valor: 'R', label: 'Reg' },
-  { valor: 'N', label: 'No' },
-  { valor: 'V', label: 'Vian' },
+  { valor: 'S', label: 'S' },
+  { valor: 'N', label: 'N' },
+  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', 'VM'] },
   { valor: 'T', label: 'T' },
-  { valor: 'RT', label: 'Reg T' },
-  { valor: 'VRM', label: 'Vian R Mañ' },
 ];
 
 // Constantes de configuración
@@ -64,7 +57,26 @@ function validarIniciales(iniciales, usuariosLista = inicialesLista) {
 
 function validarOpcion(opcion, comida) {
   const opcionesValidas = comida === 'Almuerzo' ? opcionesAlmuerzo : opcionesCena;
-  return opcionesValidas.some(op => op.valor === opcion) || opcion === '';
+  
+  // Verificar si es una opción directa
+  if (opcionesValidas.some(op => op.valor === opcion)) {
+    return true;
+  }
+  
+  // Verificar si es un valor del ciclo (como '12:30', 'Vian', 'San')
+  for (const op of opcionesValidas) {
+    if (op.ciclo && op.ciclo.includes(opcion)) {
+      return true;
+    }
+  }
+  
+  // Aceptar valores derivados por régimen
+  if (['R', 'RT', 'VRM'].includes(opcion)) {
+    return true;
+  }
+  
+  // Permitir opción vacía
+  return opcion === '';
 }
 
 function App() {
@@ -111,6 +123,7 @@ function App() {
   const [showSheetStructureValidator, setShowSheetStructureValidator] = useState(false);
   const [showSyncDebugger, setShowSyncDebugger] = useState(false);
   const [usuariosSinComidasHoy, setUsuariosSinComidasHoy] = useState([]);
+  const [regimenActivo, setRegimenActivo] = useState(false);
   
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
@@ -424,6 +437,7 @@ function App() {
       'T': ' (T)',
       'RT': ' (RT)',
       'VRM': ' (VRM)',
+      'VM': ' (VM)',
       'R': ' (R)'
     };
     return mapeo[opcion] || '';
@@ -558,6 +572,7 @@ function App() {
             else if (valor === 'T' || valor === 't') opcion = 'T';
             else if (valor === 'RT' || valor === 'rt') opcion = 'RT';
             else if (valor === 'VRM' || valor === 'vrm') opcion = 'VRM';
+            else if (valor === 'VM' || valor === 'vm') opcion = 'VM';
             else if (valor === 'S' || valor === 's' || valor === 'N' || valor === 'n' || valor === 'R' || valor === 'r') {
               opcion = valor.toUpperCase();
             }
@@ -583,7 +598,7 @@ function App() {
 
       // Función para ordenar según las reglas especificadas
       const ordenarInscripciones = (inscripciones) => {
-        const orden = { 'V': 1, '12': 2, 'S': 3, 'R': 3, 'N': 3, 'T': 4, 'RT': 4, 'VRM': 4 };
+        const orden = { 'V': 1, '12': 2, 'S': 3, 'R': 3, 'N': 3, 'T': 4, 'RT': 4, 'VRM': 4, 'VM': 4 };
         return inscripciones.sort((a, b) => {
           const ordenA = orden[a.opcion] || 5;
           const ordenB = orden[b.opcion] || 5;
@@ -830,25 +845,90 @@ function App() {
 
     console.log(`🔄 handleChange: ${dia} ${comida} - Valor anterior: "${seleccion[dia]?.[comida] || ''}", Nuevo valor: "${valor}"`);
 
-    // Si se presiona el mismo botón, desmarcar
-    if (seleccion[dia]?.[comida] === valor) {
-      setSeleccion((prev) => ({
-        ...prev,
-        [dia]: {
-          ...prev[dia],
-          [comida]: '',
-        },
-      }));
+    // Obtener las opciones válidas para esta comida
+    const opcionesValidas = comida === 'Almuerzo' ? opcionesAlmuerzo : opcionesCena;
+    const opcionActual = opcionesValidas.find(op => op.valor === valor);
+    
+    // Si la opción tiene un ciclo definido, manejarlo
+    if (opcionActual && opcionActual.ciclo) {
+      const valorActual = seleccion[dia]?.[comida] || '';
+      const ciclo = opcionActual.ciclo;
+      
+      // Tratar VRM como VM para cálculo del índice en el ciclo de V/S (cena)
+      const valorParaIndice = (valorActual === 'VRM' && opcionActual.valor === 'V/S' && comida === 'Cena')
+        ? 'VM'
+        : valorActual;
+      
+      // Encontrar el índice actual en el ciclo
+      let indiceActual = ciclo.indexOf(valorParaIndice);
+      if (indiceActual === -1) {
+        // Si no está en el ciclo, empezar desde el primer valor
+        indiceActual = -1;
+      }
+      
+      // Obtener el siguiente valor en el ciclo
+      const siguienteIndice = (indiceActual + 1) % ciclo.length;
+      let siguienteValor = ciclo[siguienteIndice];
+      
+      // Aplicar mapeo de Régimen para el ciclo V/S en cena cuando corresponde
+      if (regimenActivo && opcionActual.valor === 'V/S' && comida === 'Cena' && siguienteValor === 'VM') {
+        siguienteValor = 'VRM';
+      }
+      
+      // Si el siguiente valor es vacío, desmarcar
+      if (siguienteValor === '') {
+        setSeleccion((prev) => ({
+          ...prev,
+          [dia]: {
+            ...prev[dia],
+            [comida]: '',
+          },
+        }));
+      } else {
+        // Establecer el siguiente valor del ciclo
+        setSeleccion((prev) => ({
+          ...prev,
+          [dia]: {
+            ...prev[dia],
+            [comida]: siguienteValor,
+          },
+        }));
+      }
     } else {
-      // Si se presiona un botón diferente, cambiar la selección
-      setSeleccion((prev) => ({
-        ...prev,
-        [dia]: {
-          ...prev[dia],
-          [comida]: valor,
-        },
-      }));
+      // Comportamiento original para opciones sin ciclo
+      const valorActual = seleccion[dia]?.[comida] || '';
+      // Calcular el valor mapeado por Régimen (si aplica)
+      const mapRegimen = (baseValor) => {
+        if (!regimenActivo) return baseValor;
+        if (baseValor === 'S') return 'R';
+        if (baseValor === 'T') return 'RT';
+        if (baseValor === 'VM' && comida === 'Cena') return 'VRM';
+        return baseValor;
+      };
+      const valorMapeado = mapRegimen(valor);
+
+      // Si se presiona el mismo botón (considerando equivalentes por Régimen), desmarcar
+      if (valorActual === valor || valorActual === valorMapeado) {
+        setSeleccion((prev) => ({
+          ...prev,
+          [dia]: {
+            ...prev[dia],
+            [comida]: '',
+          },
+        }));
+      } else {
+        // Si se presiona un botón diferente, cambiar la selección con lógica de Régimen
+        const nuevoValor = valorMapeado;
+        setSeleccion((prev) => ({
+          ...prev,
+          [dia]: {
+            ...prev[dia],
+            [comida]: nuevoValor,
+          },
+        }));
+      }
     }
+    
     setTieneCambios(true);
     setActualizandoComidas(false); // Cambiar a false para permitir guardar
     
@@ -859,7 +939,7 @@ function App() {
     // setTimeout(() => {
     //   handleSubmit();
     // }, 100); // Pequeño delay para asegurar que el estado se actualice
-  }, [mostrarMensaje, seleccion, iniciales]);
+  }, [mostrarMensaje, seleccion, iniciales, regimenActivo]);
 
   const handleInputChange = useCallback((dia, comida, valor) => {
     // Validar que sea un número para Plan e Invitados
@@ -1320,7 +1400,43 @@ function App() {
   const renderBotones = useCallback((opciones, dia, comida) => (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '8px 0' }}>
       {opciones.map(op => {
-        const isSelected = seleccion[dia]?.[comida] === op.valor;
+        const valorActual = seleccion[dia]?.[comida] || '';
+        let isSelected = false;
+        let buttonText = op.label;
+        let buttonTitle = `Seleccionar ${op.label}`;
+        
+        // Si la opción tiene un ciclo, verificar si está en algún estado del ciclo
+        if (op.ciclo) {
+          // Tratar VRM como VM para selección visual en el ciclo V/S de cena
+          const valorComparado = (comida === 'Cena' && op.valor === 'V/S' && valorActual === 'VRM')
+            ? 'VM'
+            : valorActual;
+          // Solo considerar seleccionado si el valor actual (normalizado) NO es vacío y está en el ciclo
+          isSelected = valorComparado !== '' && op.ciclo.includes(valorComparado);
+          // Si está seleccionado, mostrar el valor actual real (VRM si corresponde)
+          if (isSelected && valorActual !== '') {
+            buttonText = valorActual;
+            const indice = op.ciclo.indexOf(valorComparado);
+            const next = op.ciclo[(indice + 1) % op.ciclo.length];
+            buttonTitle = `Presiona para cambiar a ${next || 'desmarcar'}`;
+          } else {
+            buttonTitle = `Presiona para seleccionar ${op.ciclo[0]}`;
+          }
+        } else {
+          // Comportamiento original para opciones sin ciclo
+          // Alinear selección visual con valores derivados por Régimen
+          if (op.valor === 'S') {
+            isSelected = valorActual === 'S' || valorActual === 'R';
+            buttonText = valorActual === 'R' ? 'R' : 'S';
+          } else if (op.valor === 'T') {
+            isSelected = valorActual === 'T' || valorActual === 'RT';
+            buttonText = valorActual === 'RT' ? 'Reg T' : 'T';
+          } else {
+            isSelected = valorActual === op.valor;
+          }
+          buttonTitle = isSelected ? 'Presiona para borrar' : `Seleccionar ${op.label}`;
+        }
+        
         return (
           <button
             key={op.valor}
@@ -1341,7 +1457,7 @@ function App() {
               transform: isSelected ? 'translateY(-1px)' : 'none',
             }}
             onClick={() => handleChange(dia, comida, op.valor)}
-            title={isSelected ? 'Presiona para borrar' : `Seleccionar ${op.label}`}
+            title={buttonTitle}
             onMouseEnter={(e) => {
               if (!isSelected) {
                 e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
@@ -1367,7 +1483,7 @@ function App() {
               }
             }}
           >
-            {op.label}
+            {buttonText}
           </button>
         );
       })}
@@ -1540,7 +1656,7 @@ function App() {
               minHeight: '24px', // Mantener altura similar al mensaje
               width: '100%'
             }}>
-              {/* Botón de las iniciales seleccionadas */}
+              {/* Botón de las iniciales seleccionadas y toggles */}
               <button
                 type="button"
                 style={{
@@ -1571,6 +1687,55 @@ function App() {
                 }}
               >
                 {iniciales}
+              </button>
+
+              {/* Botón Régimen */}
+              <button
+                type="button"
+                onClick={() => setRegimenActivo(prev => !prev)}
+                title="Alternar régimen"
+                style={{
+                  fontSize: '13px',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: regimenActivo ? '2px solid #2e7d32' : '2px solid #e8d5c4',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  background: regimenActivo
+                    ? 'linear-gradient(135deg, #2e7d32 0%, #4caf50 100%)'
+                    : 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+                  color: regimenActivo ? 'white' : '#2c1810',
+                  boxShadow: regimenActivo ? '0 4px 16px rgba(76, 175, 80, 0.2)' : 'none',
+                  transform: regimenActivo ? 'translateY(-1px)' : 'none',
+                  fontWeight: regimenActivo ? 'bold' : 'normal',
+                  marginLeft: '8px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!regimenActivo) {
+                    e.target.style.background = 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)';
+                    e.target.style.borderColor = '#2e7d32';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(76, 175, 80, 0.2)';
+                  } else {
+                    e.target.style.background = 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)';
+                    e.target.style.transform = 'translateY(-3px)';
+                    e.target.style.boxShadow = '0 8px 24px rgba(76, 175, 80, 0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!regimenActivo) {
+                    e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+                    e.target.style.borderColor = '#e8d5c4';
+                    e.target.style.transform = 'none';
+                    e.target.style.boxShadow = 'none';
+                  } else {
+                    e.target.style.background = 'linear-gradient(135deg, #2e7d32 0%, #4caf50 100%)';
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(76, 175, 80, 0.2)';
+                  }
+                }}
+              >
+                Régimen
               </button>
 
 
@@ -2523,8 +2688,7 @@ function App() {
         </div>
       </Modal>
 
-      {/* Componente PWA para instalación */}
-      <PWAInstallPrompt />
+      {/* Componente PWA para instalación (oculto) */}
 
       </div>
     </>
