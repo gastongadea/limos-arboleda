@@ -16,21 +16,21 @@ import SyncDebugger from './components/SyncDebugger';
 Modal.setAppElement('#root');
 
 const inicialesLista = [
-  'MEP', 'PGG', 'LMC', 'PAB', 'FIG', 'FAM', 'IJC', 'ELF', 'MS', 'JOA', 'GG', 'AS', 'JBA', 'IC', 'TA', 'JPS', 'FEC', 'Huesped1', 'Huesped2', 'Plan', 'Invitados'
+  'MEP', 'GG', 'IJC', 'PGG', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS', 'FAM', 'JOA', 'MS', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
 ];
 
 const opcionesAlmuerzo = [
   { valor: 'S', label: 'S' },
   { valor: 'N', label: 'N' },
   { valor: '12', label: '12', ciclo: ['12', '12:30', ''] },
-  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', ''] },
+  { valor: 'V/S', label: 'V/S', ciclo: ['V', 'San', ''] },
   { valor: 'T', label: 'T' },
 ];
 
 const opcionesCena = [
   { valor: 'S', label: 'S' },
   { valor: 'N', label: 'N' },
-  { valor: 'V/S', label: 'V/S', ciclo: ['Vian', 'San', 'VM', ''] },
+  { valor: 'V/S', label: 'V/S', ciclo: ['V', 'San', 'VM', ''] },
   { valor: 'T', label: 'T' },
 ];
 
