@@ -37,7 +37,7 @@ const opcionesCena = [
 // Constantes de configuración
 const CONFIG = {
   CLAVE_ADMIN: 'admin123',
-  DIAS_VISTA: 30,
+  DIAS_VISTA: 60,
   DIAS_RESUMEN: 7,
   MAX_INTENTOS_SYNC: 3,
   TIMEOUT_SYNC: 10000, // 10 segundos
@@ -128,7 +128,7 @@ function App() {
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
 
-  // Generar días (próximos 30 días desde hoy)
+  // Generar días (próximos 60 días desde hoy)
   useEffect(() => {
     const dias = [];
     const hoy = new Date();
