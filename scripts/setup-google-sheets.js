@@ -4,7 +4,7 @@
 const setupGoogleSheets = {
   // Configuración de usuarios (ajusta según tus necesidades)
   usuarios: [
-    'MEP', 'PGG', 'LMC', 'PAB', 'FIG', 'FAM', 'IJC', 'ELF', 'MS', 'JOA', 
+    'MEP', 'MMR', 'LMC', 'PAB', 'FIG', 'FAM', 'IJC', 'ELF', 'FA', 'JOA', 
     'GG', 'AS', 'JBA', 'IC', 'TA', 'JPS', 'FEC', 'Huesped1', 'Huesped2', 
     'Plan', 'Invitados'
   ],

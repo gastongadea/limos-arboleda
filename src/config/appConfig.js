@@ -62,8 +62,8 @@ export const APP_CONFIG = {
   // Configuración de usuarios
   USERS: {
     INITIALS: [
-      'MEP', 'GG', 'IJC', 'PGG', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS',
-      'FAM', 'JOA', 'MS', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
+      'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS',
+      'FAM', 'JOA', 'FA', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
     ],
     TYPES: {
       RESIDENTE: 'Residente',
