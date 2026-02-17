@@ -681,6 +681,49 @@ class GoogleSheetsService {
     }
   }
 
+  // Columna Z (índice 25) para Misa en fila de almuerzo (tras insertar GGP entre TA y H1)
+  static COL_MISA = 25;
+
+  // Obtener valores de Misa (columna Y en fila de almuerzo) para los días indicados
+  async getMisaInscripciones(dias) {
+    try {
+      if (!this.isConfigured().read) return {};
+      const sheetData = await this.getSheetDataForDates(
+        dias[0],
+        dias[dias.length - 1],
+        false
+      );
+      const result = {};
+      for (const dia of dias) {
+        const almuerzoRow = this.findRowByDateAndType(sheetData, dia, 'A');
+        const val = almuerzoRow?.data?.[this.constructor.COL_MISA];
+        const v = (val != null && val !== '') ? String(val).trim().toUpperCase() : '';
+        result[dia] = ['S', 'N', 'A'].includes(v) ? v : '';
+      }
+      return result;
+    } catch (error) {
+      console.error('Error al obtener Misa:', error);
+      return {};
+    }
+  }
+
+  // Guardar valor de Misa (S, N o A) en columna Z, fila de almuerzo para la fecha
+  async saveMisaInscripcion(dia, valor) {
+    try {
+      if (!this.isConfigured().write) throw new Error('Google Sheets no configurado para escritura');
+      await this.ensureDatesExist([dia]);
+      const sheetData = await this.getSheetData(true);
+      const rowInfo = this.findRowByDateAndType(sheetData, dia, 'A');
+      if (!rowInfo) throw new Error(`No se encontró fila de almuerzo para ${dia}`);
+      const range = `${this.numberToColumnLetter(this.constructor.COL_MISA + 1)}${rowInfo.row + 1}`;
+      await this.updateCell(range, valor);
+      return true;
+    } catch (error) {
+      console.error('Error al guardar Misa:', error);
+      throw error;
+    }
+  }
+
   // Convertir número de columna a letra (1=A, 2=B, etc.)
   numberToColumnLetter(num) {
     let result = '';

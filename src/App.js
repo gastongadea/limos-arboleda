@@ -16,7 +16,7 @@ import SyncDebugger from './components/SyncDebugger';
 Modal.setAppElement('#root');
 
 const inicialesLista = [
-  'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS', 'FAM', 'JOA', 'FMA', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
+  'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS', 'FAM', 'JOA', 'FMA', 'JPS', 'FEC', 'TA', 'GGP', 'H1', 'H2', 'Invitados', 'Plan'
 ];
 
 const opcionesAlmuerzo = [
@@ -33,6 +33,9 @@ const opcionesCena = [
   { valor: 'V/S', label: 'V/S', ciclo: ['V', 'San', 'VM', ''] },
   { valor: 'T', label: 'T' },
 ];
+
+const opcionesMisa = ['S', 'N', 'A'];
+const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 // Constantes de configuración
 const CONFIG = {
@@ -125,6 +128,12 @@ function App() {
   const [usuariosSinComidasHoy, setUsuariosSinComidasHoy] = useState([]);
   const [regimenActivo, setRegimenActivo] = useState(false);
   
+  // Misa: modal y valores (columna Y en fila almuerzo)
+  const [showMisaModal, setShowMisaModal] = useState(false);
+  const [misaSeleccion, setMisaSeleccion] = useState({});
+  const [misaProximos7, setMisaProximos7] = useState({});
+  const [actualizandoMisa, setActualizandoMisa] = useState(false);
+  
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
 
@@ -172,7 +181,26 @@ function App() {
     cargarUsuarios();
   }, []);
 
+  // Cargar Misa próximos 7 días para la barra principal
+  const cargarMisaProximos7 = useCallback(async () => {
+    if (dias.length < 7 || !googleSheetsService.isConfigured()) return;
+    const proximos7 = dias.slice(0, 7);
+    try {
+      const data = await googleSheetsService.getMisaInscripciones(proximos7);
+      setMisaProximos7(data);
+    } catch (e) {
+      console.warn('Error cargando Misa próximos 7:', e);
+    }
+  }, [dias]);
 
+  useEffect(() => {
+    cargarMisaProximos7();
+  }, [cargarMisaProximos7]);
+
+  // Al cerrar modal Misa, refrescar próximos 7
+  useEffect(() => {
+    if (!showMisaModal) cargarMisaProximos7();
+  }, [showMisaModal, cargarMisaProximos7]);
 
   // Cargar selección al cambiar iniciales
   useEffect(() => {
@@ -1110,6 +1138,41 @@ function App() {
     setAdminError('');
   }, []);
 
+  const handleOpenMisaModal = useCallback(async () => {
+    if (dias.length === 0) return;
+    setShowMisaModal(true);
+    setActualizandoMisa(true);
+    try {
+      if (googleSheetsService.isConfigured()) {
+        const data = await googleSheetsService.getMisaInscripciones(dias);
+        setMisaSeleccion(data);
+      } else {
+        setMisaSeleccion({});
+      }
+    } catch (e) {
+      console.warn('Error cargando Misa:', e);
+      setMisaSeleccion({});
+    } finally {
+      setActualizandoMisa(false);
+    }
+  }, [dias]);
+
+  const handleMisaChange = useCallback(async (dia, valor) => {
+    const nuevo = misaSeleccion[dia] === valor ? '' : valor;
+    setMisaSeleccion(prev => ({ ...prev, [dia]: nuevo }));
+    if (googleSheetsService.isConfigured()) {
+      setActualizandoMisa(true);
+      try {
+        await googleSheetsService.saveMisaInscripcion(dia, nuevo);
+        await cargarMisaProximos7();
+      } catch (e) {
+        mostrarMensaje('Error al guardar Misa en la planilla', 'error');
+      } finally {
+        setActualizandoMisa(false);
+      }
+    }
+  }, [misaSeleccion, cargarMisaProximos7, mostrarMensaje]);
+
   const handleAdminSubmit = useCallback((e) => {
     e.preventDefault();
     if (adminClave === CONFIG.CLAVE_ADMIN) {
@@ -1738,8 +1801,6 @@ function App() {
                 R
               </button>
 
-
-
               {/* Mensajes de estado en el centro */}
               <div style={{
                 display: 'flex',
@@ -1883,9 +1944,46 @@ function App() {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
             const mostrarBoton = !iniciales && !mostrandoAnotadosHoy; // Solo mostrar si no hay selección de iniciales y no se está mostrando la vista Hoy
-            
+            const esMisa = ini === 'Misa';
+
             if (!mostrarBoton) return null;
-            
+
+            // Botón Misa: abre el modal de S/N/A por día, no la vista de comidas
+            if (esMisa) {
+              return (
+                <button
+                  key={ini}
+                  type="button"
+                  style={{
+                    fontSize: '13px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '2px solid #e65100',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                    color: '#bf360c',
+                    boxShadow: '0 4px 16px rgba(230, 81, 0, 0.2)',
+                    fontWeight: 'bold',
+                  }}
+                  onClick={handleOpenMisaModal}
+                  title="Misa - S/N/A por día"
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%)';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 8px 24px rgba(230, 81, 0, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)';
+                    e.target.style.transform = 'none';
+                    e.target.style.boxShadow = '0 4px 16px rgba(230, 81, 0, 0.2)';
+                  }}
+                >
+                  Misa
+                </button>
+              );
+            }
+
             return (
               <button
                 key={ini}
@@ -1957,6 +2055,41 @@ function App() {
             );
           })}
         </div>
+
+        {/* Misa - Próximos 7 días (solo en pantalla principal, no en vista de comidas del comensal) */}
+        {dias.length >= 7 && !iniciales && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+            border: '2px solid #e65100',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(230, 81, 0, 0.15)'
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#bf360c', marginBottom: '8px' }}>
+              Misa – Próximos 7 días
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {dias.slice(0, 7).map(dia => {
+                const d = new Date(dia + 'T12:00:00');
+                const nombreDia = diasSemana[d.getDay()];
+                const valor = misaProximos7[dia] || '';
+                return (
+                  <div key={dia} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#2c1810' }}>
+                    <strong style={{ minWidth: '100px' }}>{nombreDia}:</strong>
+                    <span style={{
+                      minWidth: '20px',
+                      fontWeight: 'bold',
+                      color: valor ? '#bf360c' : '#999'
+                    }}>
+                      {valor || '–'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Vista de Anotados para Hoy */}
         {mostrandoAnotadosHoy && (
@@ -2426,6 +2559,117 @@ function App() {
             </button>
           </div>
         )}
+      </Modal>
+
+      {/* Modal Misa - S/N/A por día */}
+      <Modal
+        isOpen={showMisaModal}
+        onRequestClose={() => setShowMisaModal(false)}
+        style={{
+          content: {
+            maxWidth: 520,
+            maxHeight: '85vh',
+            margin: 'auto',
+            padding: 24,
+            borderRadius: 'var(--border-radius)',
+            zIndex: 9999,
+            background: 'linear-gradient(180deg, #faf5ff 0%, #fff 100%)',
+            border: '3px solid #5e35b1',
+            boxShadow: '0 8px 32px rgba(94, 53, 177, 0.25)',
+            position: 'relative',
+            overflow: 'auto',
+          },
+          overlay: {
+            zIndex: 9998,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(5px)',
+          },
+        }}
+        contentLabel="Misa"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h3 style={{ color: '#5e35b1', margin: 0, fontSize: '18px' }}>Misa – S / N / A por día</h3>
+          <button
+            type="button"
+            onClick={() => setShowMisaModal(false)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              border: '2px solid #5e35b1',
+              background: '#fff',
+              color: '#5e35b1',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            Cerrar
+          </button>
+        </div>
+        {actualizandoMisa && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '8px 16px',
+            marginBottom: 16,
+            background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+            border: '2px solid #e65100',
+            borderRadius: '8px',
+            color: '#bf360c',
+            fontWeight: 'bold',
+            fontSize: '14px',
+            boxShadow: '0 2px 8px rgba(230, 81, 0, 0.2)',
+            whiteSpace: 'nowrap'
+          }}>
+            🔄 Esperá...
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '60vh', overflowY: 'auto' }}>
+          {dias.map(dia => (
+            <div
+              key={dia}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                background: esFinDeSemana(dia) ? 'rgba(94, 53, 177, 0.08)' : '#fff',
+                border: '1px solid #e0e0e0',
+                borderRadius: '8px',
+              }}
+            >
+              <span style={{ fontWeight: '600', color: '#2c1810', minWidth: '140px' }}>
+                {formatearFecha(dia)}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {opcionesMisa.map(op => {
+                  const selected = (misaSeleccion[dia] || '') === op;
+                  return (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => handleMisaChange(dia, op)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        padding: 0,
+                        borderRadius: '8px',
+                        border: selected ? '2px solid #5e35b1' : '2px solid #e0e0e0',
+                        background: selected ? 'linear-gradient(135deg, #5e35b1 0%, #7e57c2 100%)' : '#fff',
+                        color: selected ? '#fff' : '#2c1810',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                      }}
+                    >
+                      {op}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </Modal>
 
       {/* Modal de Gestión de Datos */}

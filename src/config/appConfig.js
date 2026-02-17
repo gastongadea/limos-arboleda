@@ -63,7 +63,7 @@ export const APP_CONFIG = {
   USERS: {
     INITIALS: [
       'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS',
-      'FAM', 'JOA', 'FMA', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
+      'FAM', 'JOA', 'FMA', 'JPS', 'FEC', 'TA', 'GGP', 'H1', 'H2', 'Invitados', 'Plan'
     ],
     TYPES: {
       RESIDENTE: 'Residente',
