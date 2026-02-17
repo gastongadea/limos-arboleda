@@ -16,7 +16,7 @@ import SyncDebugger from './components/SyncDebugger';
 Modal.setAppElement('#root');
 
 const inicialesLista = [
-  'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS', 'FAM', 'JOA', 'FA', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
+  'MEP', 'GG', 'IJC', 'MMR', 'LMC', 'PAB', 'JBA', 'IC', 'ELF', 'FIG', 'AS', 'FAM', 'JOA', 'FMA', 'JPS', 'FEC', 'TA', 'H1', 'H2', 'Invitados', 'Plan'
 ];
 
 const opcionesAlmuerzo = [
