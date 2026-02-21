@@ -134,6 +134,9 @@ function App() {
   const [misaProximos7, setMisaProximos7] = useState({});
   const [actualizandoMisa, setActualizandoMisa] = useState(false);
   
+  // Cumpleaños: próximos 30 días desde hoja Cumpleaños
+  const [cumpleanosProximos, setCumpleanosProximos] = useState([]);
+  
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
 
@@ -201,6 +204,21 @@ function App() {
   useEffect(() => {
     if (!showMisaModal) cargarMisaProximos7();
   }, [showMisaModal, cargarMisaProximos7]);
+
+  // Cargar próximos cumpleaños (30 días) en pantalla principal
+  useEffect(() => {
+    if (!googleSheetsService.isConfigured() || iniciales) return;
+    const cargar = async () => {
+      try {
+        const lista = await googleSheetsService.getProximosCumpleanos(30);
+        setCumpleanosProximos(lista);
+      } catch (e) {
+        console.warn('Error cargando cumpleaños:', e);
+        setCumpleanosProximos([]);
+      }
+    };
+    cargar();
+  }, [iniciales]);
 
   // Cargar selección al cambiar iniciales
   useEffect(() => {
@@ -381,7 +399,9 @@ function App() {
   // Función para detectar usuarios sin comidas hoy
   const detectarUsuariosSinComidasHoy = useCallback(async () => {
     try {
-      const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      // Calcular fecha de hoy en horario local (evitar problemas con UTC)
+      const hoyDate = new Date();
+      const hoy = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`; // YYYY-MM-DD
       
       // Obtener datos de localStorage
       const inscripciones = localStorageService.getInscripciones();
@@ -435,9 +455,11 @@ function App() {
       // Filtrar usuarios que NO han cargado comidas hoy
       const usuariosSinComidas = listaUsuarios.filter(ini => {
         const tieneComidas = usuariosConComidas.has(ini);
-        const esEspecial = ini.toLowerCase().includes('huesped') || 
-                          ini.toLowerCase().includes('invitad') ||
-                          ini.toLowerCase().includes('plan') ||
+        const iniLower = ini.trim().toLowerCase();
+        const esEspecial = iniLower.includes('huesped') || 
+                          iniLower.includes('invitad') ||
+                          iniLower.includes('plan') ||
+                          iniLower === 'misa' ||
                           ini.trim() === '';
         
         return !tieneComidas && !esEspecial;
@@ -471,19 +493,30 @@ function App() {
     return mapeo[opcion] || '';
   }, []);
 
-  // Función auxiliar para contar solo las opciones válidas (excluyendo No y VRM)
+  // Función auxiliar para contar todas las opciones válidas (incluyendo Invitados/Plan numéricos, V, S, etc.)
   const contarOpcionesValidas = useCallback((inscripciones) => {
     return inscripciones.filter(inscripcion => {
       const opcion = inscripcion.opcion;
-      // Contar V, 12, T, RT, S (Sandwich), R (Vianda) - excluir N (No) y VRM
-      return ['V', '12', 'T', 'RT', 'S', 'R'].includes(opcion);
+      const iniciales = inscripcion.iniciales;
+      
+      // Para Invitados y Plan, contar si tienen un valor numérico > 0
+      if (iniciales === 'Invitados' || iniciales === 'Plan') {
+        const num = parseInt(opcion, 10);
+        return !isNaN(num) && num > 0;
+      }
+      
+      // Para otros usuarios, contar todas las opciones válidas (incluyendo V y S para el conteo)
+      // Excluir solo N (No) y VRM
+      return opcion !== 'N' && opcion !== 'VRM' && opcion !== '';
     }).length;
   }, []);
 
   // Función para obtener los datos de hoy
   const obtenerDatosHoy = useCallback(async () => {
     try {
-      const hoy = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      // Calcular fecha de hoy en horario local (evitar problemas con UTC)
+      const hoyDate = new Date();
+      const hoy = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`; // YYYY-MM-DD
       const almuerzo = [];
       const cena = [];
 
@@ -590,32 +623,51 @@ function App() {
         // Buscar en todas las columnas (después de las columnas de fecha y comida)
         for (let colIndex = Math.max(fechaColIndex, comidaColIndex) + 1; colIndex < row.length; colIndex++) {
           const valor = row[colIndex];
-          const iniciales = headers[colIndex];
+          const headerValor = headers[colIndex];
+          const iniciales = headerValor ? headerValor.toString().trim() : '';
           
-          if (valor && iniciales && valor !== '') {
+          // No considerar columnas especiales como "Misa" como si fueran comensales
+          if (!iniciales || iniciales.toLowerCase() === 'misa') continue;
+          
+          if (valor && valor !== '') {
             // Determinar la opción basándose en el valor
             let opcion = '';
-            if (valor === 'V' || valor === 'v') opcion = 'V';
-            else if (valor === '12') opcion = '12';
-            else if (valor === 'T' || valor === 't') opcion = 'T';
-            else if (valor === 'RT' || valor === 'rt') opcion = 'RT';
-            else if (valor === 'VRM' || valor === 'vrm') opcion = 'VRM';
-            else if (valor === 'VM' || valor === 'vm') opcion = 'VM';
-            else if (valor === 'S' || valor === 's' || valor === 'N' || valor === 'n' || valor === 'R' || valor === 'r') {
-              opcion = valor.toUpperCase();
+            const valorStr = String(valor).trim();
+            const esInvitadosOPlan = iniciales === 'Invitados' || iniciales === 'Plan';
+            
+            // Para Invitados y Plan, el valor puede ser numérico (cantidad)
+            if (esInvitadosOPlan) {
+              const num = parseInt(valorStr, 10);
+              if (!isNaN(num) && num > 0) {
+                opcion = valorStr; // Guardar el número como opción para contar
+              }
+            } else {
+              // Para otros usuarios, procesar opciones de texto
+              if (valorStr === 'V' || valorStr === 'v') opcion = 'V';
+              else if (valorStr === '12') opcion = '12';
+              else if (valorStr === 'T' || valorStr === 't') opcion = 'T';
+              else if (valorStr === 'RT' || valorStr === 'rt') opcion = 'RT';
+              else if (valorStr === 'VRM' || valorStr === 'vrm') opcion = 'VRM';
+              else if (valorStr === 'VM' || valorStr === 'vm') opcion = 'VM';
+              else if (valorStr === 'S' || valorStr === 's' || valorStr === 'N' || valorStr === 'n' || valorStr === 'R' || valorStr === 'r') {
+                opcion = valorStr.toUpperCase();
+              }
             }
 
-            const inscripcion = {
-              iniciales: iniciales,
-              opcion: opcion,
-              comida: comida
-            };
+            // Solo agregar si hay una opción válida
+            if (opcion !== '') {
+              const inscripcion = {
+                iniciales: iniciales,
+                opcion: opcion,
+                comida: comida
+              };
 
-            // Comparar con abreviaciones y nombres completos
-            if (comida === 'Almuerzo' || comida === 'A' || comida === 'a') {
-              almuerzo.push(inscripcion);
-            } else if (comida === 'Cena' || comida === 'C' || comida === 'c') {
-              cena.push(inscripcion);
+              // Comparar con abreviaciones y nombres completos
+              if (comida === 'Almuerzo' || comida === 'A' || comida === 'a') {
+                almuerzo.push(inscripcion);
+              } else if (comida === 'Cena' || comida === 'C' || comida === 'c') {
+                cena.push(inscripcion);
+              }
             }
           }
         }
@@ -635,20 +687,28 @@ function App() {
         });
       };
 
-      // Ordenar y formatear almuerzo (excluir los que tienen opción "N")
+      // Ordenar y formatear almuerzo (excluir N, V y S - No, Vianda y Sandwich)
       const almuerzoOrdenado = ordenarInscripciones(almuerzo);
       const almuerzoFormateado = almuerzoOrdenado
-        .filter(inscripcion => inscripcion.opcion !== 'N')
+        .filter(inscripcion => inscripcion.opcion !== 'N' && inscripcion.opcion !== 'V' && inscripcion.opcion !== 'S')
         .map(inscripcion => {
+          // Para Invitados/Plan, mostrar el número directamente
+          if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
+            return `${inscripcion.iniciales} (${inscripcion.opcion})`;
+          }
           const particularidad = obtenerParticularidad(inscripcion.opcion);
           return `${inscripcion.iniciales}${particularidad}`;
         });
 
-      // Ordenar y formatear cena (excluir los que tienen opción "N")
+      // Ordenar y formatear cena (excluir N, V y S - No, Vianda y Sandwich)
       const cenaOrdenada = ordenarInscripciones(cena);
       const cenaFormateada = cenaOrdenada
-        .filter(inscripcion => inscripcion.opcion !== 'N')
+        .filter(inscripcion => inscripcion.opcion !== 'N' && inscripcion.opcion !== 'V' && inscripcion.opcion !== 'S')
         .map(inscripcion => {
+          // Para Invitados/Plan, mostrar el número directamente
+          if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
+            return `${inscripcion.iniciales} (${inscripcion.opcion})`;
+          }
           const particularidad = obtenerParticularidad(inscripcion.opcion);
           return `${inscripcion.iniciales}${particularidad}`;
         });
@@ -2056,8 +2116,8 @@ function App() {
           })}
         </div>
 
-        {/* Misa - Próximos 7 días (solo en pantalla principal, no en vista de comidas del comensal) */}
-        {dias.length >= 7 && !iniciales && (
+        {/* Misa - Próximos 7 días (solo en pantalla principal, no en vista de comidas del comensal ni en Anotados para hoy) */}
+        {dias.length >= 7 && !iniciales && !mostrandoAnotadosHoy && (
           <div style={{
             marginTop: '12px',
             padding: '12px 16px',
@@ -2088,6 +2148,22 @@ function App() {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Próximos cumpleaños (30 días) - solo en pantalla principal, no en Anotados para hoy */}
+        {!iniciales && !mostrandoAnotadosHoy && cumpleanosProximos.length > 0 && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+            border: '2px solid #2e7d32',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(46, 125, 50, 0.15)'
+          }}>
+            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1b5e20' }}>
+              Próximos cumpleaños: {cumpleanosProximos.map(c => c.edad != null ? `${c.fechaDisplay} ${c.inicial} (${c.edad})` : `${c.fechaDisplay} ${c.inicial}`).join(', ')}
+            </span>
           </div>
         )}
 

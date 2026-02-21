@@ -521,6 +521,116 @@ class GoogleSheetsService {
     }
   }
 
+  // Nombre de la hoja de cumpleaños (solapa: col A = iniciales, col B = fecha nacimiento)
+  static SHEET_CUMPLEANOS = 'Cumples';
+
+  // Obtener datos de la hoja Cumples (columnas: A = iniciales, B = fecha nacimiento)
+  async getCumpleanosSheet(forceRefresh = false) {
+    try {
+      if (!this.isConfigured().read) return [];
+      const cacheKey = 'cumpleanosSheet';
+      const cached = this.cache.get(cacheKey);
+      if (!forceRefresh && cached && (Date.now() - cached.timestamp) < this.cacheTimeout) {
+        return cached.data;
+      }
+      const sheetName = encodeURIComponent(this.constructor.SHEET_CUMPLEANOS);
+      const response = await fetch(
+        `${this.baseUrl}/${this.sheetId}/values/${sheetName}!A1:B200?key=${this.apiKey}`
+      );
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn('Hoja Cumples no encontrada o error:', response.status, errText);
+        return [];
+      }
+      const data = await response.json();
+      const rows = data.values || [];
+      this.cache.set(cacheKey, { data: rows, timestamp: Date.now() });
+      return rows;
+    } catch (e) {
+      console.warn('Error leyendo hoja Cumples:', e);
+      return [];
+    }
+  }
+
+  // Parsear fecha de nacimiento: string "29/02/1958", "29/2/58", o número (serial Sheets) -> { day, month, year }
+  parseCumpleanosDate(val) {
+    if (val == null || val === '') return null;
+    // Google Sheets puede devolver la fecha como número serial (días desde 1899-12-30)
+    if (typeof val === 'number') {
+      const d = new Date((val - 25569) * 86400 * 1000);
+      if (isNaN(d.getTime())) return null;
+      return {
+        day: d.getDate(),
+        month: d.getMonth() + 1,
+        year: d.getFullYear()
+      };
+    }
+    const s = String(val).trim();
+    const slash = s.split('/');
+    if (slash.length >= 2) {
+      const day = parseInt(slash[0], 10);
+      const month = parseInt(slash[1], 10);
+      let year = slash.length >= 3 ? parseInt(slash[2], 10) : null;
+      if (year != null && year < 100) year = year >= 50 ? 1900 + year : 2000 + year;
+      if (!isNaN(day) && !isNaN(month) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { day, month, year };
+      }
+    }
+    const dash = s.split('-');
+    if (dash.length >= 2) {
+      const day = parseInt(dash[0], 10);
+      const month = parseInt(dash[1], 10);
+      let year = dash.length >= 3 ? parseInt(dash[2], 10) : null;
+      if (year != null && year < 100) year = year >= 50 ? 1900 + year : 2000 + year;
+      if (!isNaN(day) && !isNaN(month) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { day, month, year };
+      }
+    }
+    return null;
+  }
+
+  // Si la fila parece encabezado (Inicial, Fecha, etc.), ignorarla
+  isHeaderRowCumples(row) {
+    if (!row || !row[0]) return false;
+    const a = String(row[0]).trim().toLowerCase();
+    const b = (row[1] != null) ? String(row[1]).trim().toLowerCase() : '';
+    if (a === 'inicial' || a === 'iniciales' || a === 'nombre') return true;
+    if (b === 'fecha' || b === 'fecha de nacimiento' || b === 'nacimiento') return true;
+    if (a === '' && b === '') return true;
+    return false;
+  }
+
+  // Próximos cumpleaños en los próximos N días. Retorna [{ inicial, fechaDisplay, edad }, ...] ordenados por fecha
+  async getProximosCumpleanos(dias = 30) {
+    const rows = await this.getCumpleanosSheet(true);
+    if (!rows.length) return [];
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const fin = new Date(hoy);
+    fin.setDate(hoy.getDate() + dias);
+    const resultados = [];
+    const year = hoy.getFullYear();
+    for (let i = 0; i < rows.length; i++) {
+      if (this.isHeaderRowCumples(rows[i])) continue;
+      const inicial = rows[i][0] ? String(rows[i][0]).trim() : '';
+      const parsed = this.parseCumpleanosDate(rows[i][1]);
+      if (!inicial || !parsed) continue;
+      let d = new Date(year, parsed.month - 1, parsed.day);
+      if (d.getDate() !== parsed.day) d = new Date(year, parsed.month - 1, Math.min(parsed.day, 28));
+      if (d < hoy) {
+        d = new Date(year + 1, parsed.month - 1, parsed.day);
+        if (d.getDate() !== parsed.day) d = new Date(year + 1, parsed.month - 1, Math.min(parsed.day, 28));
+      }
+      if (d >= hoy && d <= fin) {
+        const fechaDisplay = `${String(parsed.day).padStart(2, '0')}/${parsed.month}`;
+        const edad = parsed.year != null ? (d.getFullYear() - parsed.year) : null;
+        resultados.push({ inicial, fechaDisplay, edad, date: d });
+      }
+    }
+    resultados.sort((a, b) => a.date - b.date);
+    return resultados.map(({ inicial, fechaDisplay, edad }) => ({ inicial, fechaDisplay, edad }));
+  }
+
   // Parsear fecha de diferentes formatos
   parseDate(dateString) {
     if (!dateString) return null;
