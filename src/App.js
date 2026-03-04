@@ -184,10 +184,10 @@ function App() {
     cargarUsuarios();
   }, []);
 
-  // Cargar Misa próximos 7 días para la barra principal
+  // Cargar Misa próximos 8 días para la barra principal
   const cargarMisaProximos7 = useCallback(async () => {
-    if (dias.length < 7 || !googleSheetsService.isConfigured()) return;
-    const proximos7 = dias.slice(0, 7);
+    if (dias.length < 8 || !googleSheetsService.isConfigured()) return;
+    const proximos7 = dias.slice(0, 8);
     try {
       const data = await googleSheetsService.getMisaInscripciones(proximos7);
       setMisaProximos7(data);
@@ -493,7 +493,7 @@ function App() {
     return mapeo[opcion] || '';
   }, []);
 
-  // Función auxiliar para contar todas las opciones válidas (incluyendo Invitados/Plan numéricos, V, S, etc.)
+  // Función auxiliar para contar todas las opciones válidas (incluyendo Invitados/Plan numéricos, pero excluyendo V y S)
   const contarOpcionesValidas = useCallback((inscripciones) => {
     return inscripciones.filter(inscripcion => {
       const opcion = inscripcion.opcion;
@@ -505,9 +505,9 @@ function App() {
         return !isNaN(num) && num > 0;
       }
       
-      // Para otros usuarios, contar todas las opciones válidas (incluyendo V y S para el conteo)
-      // Excluir solo N (No) y VRM
-      return opcion !== 'N' && opcion !== 'VRM' && opcion !== '';
+      // Para otros usuarios, contar opciones válidas de salón
+      // Excluir N (No), V (Vianda), S (Sandwich) y VRM
+      return opcion !== 'N' && opcion !== 'V' && opcion !== 'S' && opcion !== 'VRM' && opcion !== '';
     }).length;
   }, []);
 
@@ -687,10 +687,15 @@ function App() {
         });
       };
 
-      // Ordenar y formatear almuerzo (excluir N, V y S - No, Vianda y Sandwich)
+      // Ordenar y formatear almuerzo (excluir N, V, S y VRM, igual que el conteo)
       const almuerzoOrdenado = ordenarInscripciones(almuerzo);
       const almuerzoFormateado = almuerzoOrdenado
-        .filter(inscripcion => inscripcion.opcion !== 'N' && inscripcion.opcion !== 'V' && inscripcion.opcion !== 'S')
+        .filter(inscripcion => 
+          inscripcion.opcion !== 'N' &&
+          inscripcion.opcion !== 'V' &&
+          inscripcion.opcion !== 'S' &&
+          inscripcion.opcion !== 'VRM'
+        )
         .map(inscripcion => {
           // Para Invitados/Plan, mostrar el número directamente
           if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
@@ -700,10 +705,15 @@ function App() {
           return `${inscripcion.iniciales}${particularidad}`;
         });
 
-      // Ordenar y formatear cena (excluir N, V y S - No, Vianda y Sandwich)
+      // Ordenar y formatear cena (excluir N, V, S y VRM, igual que el conteo)
       const cenaOrdenada = ordenarInscripciones(cena);
       const cenaFormateada = cenaOrdenada
-        .filter(inscripcion => inscripcion.opcion !== 'N' && inscripcion.opcion !== 'V' && inscripcion.opcion !== 'S')
+        .filter(inscripcion => 
+          inscripcion.opcion !== 'N' &&
+          inscripcion.opcion !== 'V' &&
+          inscripcion.opcion !== 'S' &&
+          inscripcion.opcion !== 'VRM'
+        )
         .map(inscripcion => {
           // Para Invitados/Plan, mostrar el número directamente
           if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
@@ -2129,24 +2139,49 @@ function App() {
             <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#bf360c', marginBottom: '8px' }}>
               Misa – Próximos 7 días
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {dias.slice(0, 7).map(dia => {
-                const d = new Date(dia + 'T12:00:00');
-                const nombreDia = diasSemana[d.getDay()];
-                const valor = misaProximos7[dia] || '';
-                return (
-                  <div key={dia} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#2c1810' }}>
-                    <strong style={{ minWidth: '100px' }}>{nombreDia}:</strong>
-                    <span style={{
-                      minWidth: '20px',
-                      fontWeight: 'bold',
-                      color: valor ? '#bf360c' : '#999'
-                    }}>
-                      {valor || '–'}
-                    </span>
-                  </div>
-                );
-              })}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '16px', rowGap: '6px' }}>
+              {/* Columna izquierda: 4 primeros días */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {dias.slice(0, 4).map(dia => {
+                  const d = new Date(dia + 'T12:00:00');
+                  const nombreDia = diasSemana[d.getDay()];
+                  const valor = misaProximos7[dia] || '';
+                  return (
+                    <div key={dia} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', color: '#2c1810' }}>
+                      <strong style={{ minWidth: '80px', textAlign: 'right' }}>{nombreDia}:</strong>
+                      <span style={{
+                        minWidth: '18px',
+                        marginLeft: '2px',
+                        fontWeight: 'bold',
+                        color: valor ? '#bf360c' : '#999'
+                      }}>
+                        {valor || '–'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Columna derecha: 4 siguientes días */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {dias.slice(4, 8).map(dia => {
+                  const d = new Date(dia + 'T12:00:00');
+                  const nombreDia = diasSemana[d.getDay()];
+                  const valor = misaProximos7[dia] || '';
+                  return (
+                    <div key={dia} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', color: '#2c1810' }}>
+                      <strong style={{ minWidth: '80px', textAlign: 'right' }}>{nombreDia}:</strong>
+                      <span style={{
+                        minWidth: '18px',
+                        marginLeft: '2px',
+                        fontWeight: 'bold',
+                        color: valor ? '#bf360c' : '#999'
+                      }}>
+                        {valor || '–'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
