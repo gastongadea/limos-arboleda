@@ -192,7 +192,7 @@ function App() {
       const data = await googleSheetsService.getMisaInscripciones(proximos7);
       setMisaProximos7(data);
     } catch (e) {
-      console.warn('Error cargando Misa próximos 7:', e);
+      console.warn('Error cargando Misa próximos 8:', e);
     }
   }, [dias]);
 
@@ -200,7 +200,7 @@ function App() {
     cargarMisaProximos7();
   }, [cargarMisaProximos7]);
 
-  // Al cerrar modal Misa, refrescar próximos 7
+  // Al cerrar modal Misa, refrescar próximos 8
   useEffect(() => {
     if (!showMisaModal) cargarMisaProximos7();
   }, [showMisaModal, cargarMisaProximos7]);
@@ -1398,13 +1398,13 @@ function App() {
       console.log('First date in origin (origenDias[0]):', origenDias[0]);
       console.log('Origin date range:', `${origenDias[0]} to ${ultimaFechaOrigen}`);
 
-      // 5) Encontrar los próximos 7 días consecutivos que estén vacíos
+      // 5) Encontrar los próximos 8 días consecutivos que estén vacíos
       let destinos = [];
       let fechaActual = agregarDias(ultimaFechaOrigen, 1); // Empezar desde el día siguiente
       console.log('=== DESTINATION DATES ANALYSIS ===');
       console.log('Starting search from date (ultimaFechaOrigen + 1):', fechaActual);
       
-      // Cambio: En lugar de buscar días vacíos, tomar los próximos 7 días consecutivos
+      // Cambio: En lugar de buscar días vacíos, tomar los próximos 8 días consecutivos
       for (let i = 0; i < 7; i++) {
         destinos.push(fechaActual);
         console.log(`Added ${fechaActual} to destinations (day ${i + 1} after last selection)`);
@@ -2126,7 +2126,7 @@ function App() {
           })}
         </div>
 
-        {/* Misa - Próximos 7 días (solo en pantalla principal, no en vista de comidas del comensal ni en Anotados para hoy) */}
+        {/* Misa - Próximos 8 días (solo en pantalla principal, no en vista de comidas del comensal ni en Anotados para hoy) */}
         {dias.length >= 7 && !iniciales && !mostrandoAnotadosHoy && (
           <div style={{
             marginTop: '12px',
@@ -2137,7 +2137,7 @@ function App() {
             boxShadow: '0 2px 8px rgba(230, 81, 0, 0.15)'
           }}>
             <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#bf360c', marginBottom: '8px' }}>
-              Misa – Próximos 7 días
+              Misa – Próximos 8 días
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '16px', rowGap: '6px' }}>
               {/* Columna izquierda: 4 primeros días */}
