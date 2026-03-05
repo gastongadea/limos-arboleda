@@ -493,23 +493,26 @@ function App() {
     return mapeo[opcion] || '';
   }, []);
 
-  // Función auxiliar para contar todas las opciones válidas (incluyendo Invitados/Plan numéricos, pero excluyendo V y S)
-  const contarOpcionesValidas = useCallback((inscripciones) => {
-    return inscripciones.filter(inscripcion => {
-      const opcion = inscripcion.opcion;
-      const iniciales = inscripcion.iniciales;
-      
-      // Para Invitados y Plan, contar si tienen un valor numérico > 0
-      if (iniciales === 'Invitados' || iniciales === 'Plan') {
-        const num = parseInt(opcion, 10);
-        return !isNaN(num) && num > 0;
-      }
-      
-      // Para otros usuarios, contar opciones válidas de salón
-      // Excluir N (No), V (Vianda), S (Sandwich) y VRM
-      return opcion !== 'N' && opcion !== 'V' && opcion !== 'S' && opcion !== 'VRM' && opcion !== '';
-    }).length;
+  // Función auxiliar: determina si una inscripción cuenta como comensal "válido" para hoy
+  const esInscripcionValidaSalon = useCallback((inscripcion) => {
+    if (!inscripcion) return false;
+    const opcion = inscripcion.opcion;
+    const iniciales = inscripcion.iniciales;
+
+    // Invitados y Plan: cuentan si el valor numérico es > 0
+    if (iniciales === 'Invitados' || iniciales === 'Plan') {
+      const num = parseInt(opcion, 10);
+      return !isNaN(num) && num > 0;
+    }
+
+    // Resto de usuarios: excluir solo N (No) y VRM; V y S también cuentan como comensales
+    return opcion !== 'N' && opcion !== 'VRM' && opcion !== '';
   }, []);
+
+  // Función auxiliar para contar todas las opciones válidas según la regla anterior
+  const contarOpcionesValidas = useCallback((inscripciones) => {
+    return inscripciones.filter(esInscripcionValidaSalon).length;
+  }, [esInscripcionValidaSalon]);
 
   // Función para obtener los datos de hoy
   const obtenerDatosHoy = useCallback(async () => {
@@ -687,15 +690,10 @@ function App() {
         });
       };
 
-      // Ordenar y formatear almuerzo (excluir N, V, S y VRM, igual que el conteo)
+      // Ordenar y formatear almuerzo usando la misma regla que el conteo
       const almuerzoOrdenado = ordenarInscripciones(almuerzo);
       const almuerzoFormateado = almuerzoOrdenado
-        .filter(inscripcion => 
-          inscripcion.opcion !== 'N' &&
-          inscripcion.opcion !== 'V' &&
-          inscripcion.opcion !== 'S' &&
-          inscripcion.opcion !== 'VRM'
-        )
+        .filter(inscripcion => esInscripcionValidaSalon(inscripcion))
         .map(inscripcion => {
           // Para Invitados/Plan, mostrar el número directamente
           if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
@@ -705,15 +703,10 @@ function App() {
           return `${inscripcion.iniciales}${particularidad}`;
         });
 
-      // Ordenar y formatear cena (excluir N, V, S y VRM, igual que el conteo)
+      // Ordenar y formatear cena usando la misma regla que el conteo
       const cenaOrdenada = ordenarInscripciones(cena);
       const cenaFormateada = cenaOrdenada
-        .filter(inscripcion => 
-          inscripcion.opcion !== 'N' &&
-          inscripcion.opcion !== 'V' &&
-          inscripcion.opcion !== 'S' &&
-          inscripcion.opcion !== 'VRM'
-        )
+        .filter(inscripcion => esInscripcionValidaSalon(inscripcion))
         .map(inscripcion => {
           // Para Invitados/Plan, mostrar el número directamente
           if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
