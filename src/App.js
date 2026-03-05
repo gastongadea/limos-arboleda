@@ -731,7 +731,7 @@ function App() {
       console.error('Error al obtener datos de hoy:', error);
       mostrarMensaje('Error al obtener datos de hoy: ' + error.message, 'error');
     }
-  }, [mostrarMensaje, obtenerParticularidad]);
+  }, [mostrarMensaje, obtenerParticularidad, esInscripcionValidaSalon]);
 
   const handleSubmit = useCallback(async (e) => {
     if (e) e.preventDefault();
