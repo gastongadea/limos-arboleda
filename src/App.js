@@ -1674,7 +1674,7 @@ function App() {
         }}>
           <h1 className="app-title" style={{ fontSize: '2rem' }}>
             <span className="plate-icon">🍽️</span>
-            Comidas de Arboleda
+            Arboleda
           </h1>
         </div>
       </header>
