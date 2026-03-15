@@ -27,6 +27,10 @@ function doGet(e) {
         result = updateCell(sheetId, data.range, data.value);
         break;
         
+      case 'updateCells':
+        result = updateCells(sheetId, data.updates, data.sheetName);
+        break;
+        
       case 'createRow':
         result = createRow(sheetId, data.rowData, data.sheetName);
         break;
@@ -78,6 +82,10 @@ function doPost(e) {
         result = updateCell(sheetId, data.range, data.value);
         break;
         
+      case 'updateCells':
+        result = updateCells(sheetId, data.updates, data.sheetName);
+        break;
+        
       case 'createRow':
         result = createRow(sheetId, data.rowData, data.sheetName);
         break;
@@ -118,6 +126,31 @@ function updateCell(sheetId, range, value) {
     
   } catch (error) {
     console.error('Error actualizando celda:', error);
+    return { success: false, error: error.toString() };
+  }
+}
+
+function updateCells(sheetId, updates, sheetName) {
+  try {
+    if (!updates || !Array.isArray(updates) || updates.length === 0) {
+      return { success: false, error: 'updateCells requiere un array "updates" con al menos un { range, value }' };
+    }
+    var spreadsheet = SpreadsheetApp.openById(sheetId);
+    var sheet = spreadsheet.getSheetByName(sheetName || 'Data');
+    if (!sheet) {
+      sheet = spreadsheet.getSheets()[0];
+    }
+    var applied = 0;
+    for (var i = 0; i < updates.length; i++) {
+      var u = updates[i];
+      if (u.range && u.value !== undefined) {
+        sheet.getRange(u.range).setValue(u.value);
+        applied++;
+      }
+    }
+    return { success: true, count: applied, sheetName: sheet.getName() };
+  } catch (error) {
+    console.error('Error en updateCells:', error);
     return { success: false, error: error.toString() };
   }
 }

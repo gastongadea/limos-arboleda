@@ -106,11 +106,15 @@ function processRequest(requestData) {
         console.log('🔄 Ejecutando testConnection');
         result = testConnection(spreadsheet);
         break;
+      case 'updateCells':
+        console.log('🔄 Ejecutando updateCells (lote)');
+        result = updateCells(spreadsheet, data);
+        break;
       default:
         console.log('❌ Acción no reconocida:', action);
         const errorResponse = ContentService.createTextOutput(JSON.stringify({ 
           error: 'Acción no reconocida: ' + action,
-          availableActions: ['updateCell', 'createRow', 'testConnection']
+          availableActions: ['updateCell', 'updateCells', 'createRow', 'testConnection']
         }));
         errorResponse.setMimeType(ContentService.MimeType.JSON);
         return errorResponse;
@@ -169,6 +173,37 @@ function updateCell(spreadsheet, data) {
     console.error('❌ Error actualizando celda:', error);
     throw new Error(`Error actualizando celda ${range}: ${error.message}`);
   }
+}
+
+/**
+ * Actualiza varias celdas en una sola operación (reduce delay y errores desde la app).
+ * data.updates = [{ range, value }, ...]
+ */
+function updateCells(spreadsheet, data) {
+  const updates = data.updates;
+  const sheetName = data.sheetName || 'Data';
+
+  if (!updates || !Array.isArray(updates) || updates.length === 0) {
+    throw new Error('updateCells requiere un array "updates" con al menos un { range, value }');
+  }
+
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.getSheets()[0];
+    console.log('⚠️ updateCells: usando primera hoja:', sheet.getName());
+  }
+
+  var applied = 0;
+  for (var i = 0; i < updates.length; i++) {
+    var u = updates[i];
+    if (u.range && u.value !== undefined) {
+      sheet.getRange(u.range).setValue(u.value);
+      applied++;
+    }
+  }
+
+  console.log('✅ updateCells: ' + applied + ' celdas actualizadas');
+  return { success: true, count: applied, sheetName: sheet.getName() };
 }
 
 function createRow(spreadsheet, data) {

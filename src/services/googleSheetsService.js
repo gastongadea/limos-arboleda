@@ -43,50 +43,8 @@ class GoogleSheetsService {
         return { working: false, error: 'URL no configurada' };
       }
 
-      // Determinar si estamos en desarrollo o producción
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const isGitHubPages = window.location.hostname.includes('github.io');
-      
-      // DEBUG: Log de depuración para entender el entorno
-      console.log('🔍 DEBUG - testGoogleAppsScript - Entorno detectado:');
-      console.log('  - NODE_ENV:', process.env.NODE_ENV);
-      console.log('  - hostname:', window.location.hostname);
-      console.log('  - isDevelopment:', isDevelopment);
-      console.log('  - isLocalhost:', isLocalhost);
-      console.log('  - isGitHubPages:', isGitHubPages);
-      
-      // En desarrollo local: intentar proxy local primero
-      if (isDevelopment && isLocalhost) {
-        try {
-          console.log('🔄 [VERSIÓN ACTUALIZADA] testGoogleAppsScript - Intentando proxy local...');
-          const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
-          const proxyResponse = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: this.appsScriptUrl,
-              data: {
-                action: 'testConnection',
-                sheetId: this.sheetId,
-                data: {}
-              }
-            })
-          });
-
-          if (proxyResponse.ok) {
-            const result = await proxyResponse.json();
-            return { working: true, data: result };
-          }
-        } catch (proxyError) {
-          console.log('Proxy local no disponible, usando llamada directa...');
-        }
-      }
-      
-      // En GitHub Pages o producción: usar petición GET para evitar CORS
-      console.log('🔄 [VERSIÓN FINAL] testGoogleAppsScript - Llamando directamente a Google Apps Script con GET...');
+      // Usar siempre GET/JSONP (mismo comportamiento en local y en producción; evita CORS)
+      console.log('🔄 testGoogleAppsScript - Llamando a Google Apps Script (GET/JSONP)...');
       
       // Convertir datos a parámetros de URL para petición GET
       const params = new URLSearchParams({
@@ -213,46 +171,14 @@ class GoogleSheetsService {
       }
 
       console.log('🔄 Llamando a Google Apps Script...');
-      console.log('Action:', action);
-      console.log('Data:', data);
-      
-      // En desarrollo local: intentar proxy local primero
-      if (isDevelopment && isLocalhost) {
-        try {
-          console.log('🔄 [VERSIÓN ACTUALIZADA] Intentando proxy local...');
-          const proxyUrl = 'http://localhost:3001/proxy/google-apps-script';
-          const proxyResponse = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: this.appsScriptUrl,
-              data: {
-                action,
-                sheetId: this.sheetId,
-                data
-              }
-            })
-          });
-
-          if (proxyResponse.ok) {
-            const result = await proxyResponse.json();
-            console.log('✅ Respuesta del proxy local:', result);
-            
-            if (result.success === false) {
-              throw new Error(`Error en Apps Script: ${result.error || 'Error desconocido'}`);
-            }
-            
-            return result;
-          }
-        } catch (proxyError) {
-          console.log('Proxy local no disponible, usando llamada directa...');
-        }
+      console.log('📤 Action enviada:', action, typeof action);
+      console.log('📤 Data (keys):', data ? Object.keys(data) : data);
+      if (action === 'updateCells' && data && data.updates) {
+        console.log('📤 updateCells: cantidad de celdas:', data.updates.length);
       }
       
-      // En GitHub Pages o producción: usar petición GET para evitar CORS
-      console.log('🔄 [VERSIÓN FINAL] Llamando directamente a Google Apps Script con GET...');
+      // Llamar siempre directo al script por GET/JSONP (evita CORS y no requiere proxy en local)
+      console.log('🔄 Llamando a Google Apps Script (GET/JSONP)...');
       
       // Convertir datos a parámetros de URL para petición GET
       const params = new URLSearchParams({
@@ -262,7 +188,10 @@ class GoogleSheetsService {
       });
       
       const url = `${this.appsScriptUrl}?${params.toString()}`;
-      console.log('URL de petición:', url);
+      console.log('📤 URL (base, para probar en navegador):', `${this.appsScriptUrl}?action=${action}&sheetId=${this.sheetId ? '...' : ''}`);
+      if (url.length > 2000) {
+        console.warn('⚠️ URL muy larga (' + url.length + ' caracteres). Si falla, el script puede no recibir bien los datos.');
+      }
       
              // Usar JSONP para evitar CORS completamente
        return new Promise((resolve, reject) => {
@@ -298,8 +227,10 @@ class GoogleSheetsService {
            
            // Verificar si la operación fue exitosa
            if (data.success === false) {
+             console.error('📥 Respuesta del script (error):', data);
              reject(new Error(`Error en Apps Script: ${data.error || 'Error desconocido'}`));
            } else {
+             console.log('📥 Respuesta del script (éxito):', data);
              resolve(data);
            }
          };
@@ -325,13 +256,8 @@ class GoogleSheetsService {
     } catch (error) {
       console.error('Error llamando Google Apps Script:', error);
       
-      // Si hay error de CORS en GitHub Pages, mostrar mensaje específico
       if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
-        if (isGitHubPages) {
-          console.warn('💡 Error de CORS en GitHub Pages. Verifica que el Google Apps Script esté configurado para permitir peticiones desde tu dominio.');
-        } else if (isDevelopment && isLocalhost) {
-          console.warn('💡 Sugerencia: Ejecuta el proxy server con: node proxy-server.js');
-        }
+        console.warn('💡 Error de red/CORS. La app usa JSONP al script; comprobá que la URL de Apps Script sea correcta y que el script esté desplegado.');
       }
       
       throw error;
@@ -788,6 +714,74 @@ class GoogleSheetsService {
     } catch (error) {
       console.error('Error al guardar inscripción en Google Sheets:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Guardar muchas inscripciones en una sola llamada a la planilla (menos delay y menos fallos).
+   * Asegura fechas, hace una lectura de la hoja, arma todas las celdas y llama a updateCells en Apps Script.
+   * @param {Array<{fecha:string, comida:string, iniciales:string, opcion:string}>} inscripciones
+   * @returns {Promise<{ success: boolean, count: number, errors: string[] }>}
+   */
+  async saveInscripcionesBatch(inscripciones) {
+    const errors = [];
+    if (!this.isConfigured().write) {
+      throw new Error('Google Sheets no está configurado para escritura');
+    }
+    if (!inscripciones || inscripciones.length === 0) {
+      return { success: true, count: 0, errors: [] };
+    }
+
+    const fechasUnicas = [...new Set(inscripciones.map(i => i.fecha))];
+    await this.ensureDatesExist(fechasUnicas);
+
+    const sheetData = await this.getSheetData(true);
+    const updates = [];
+
+    for (const ins of inscripciones) {
+      const comidaType = ins.comida === 'Almuerzo' ? 'A' : 'C';
+      const rowInfo = this.findRowByDateAndType(sheetData, ins.fecha, comidaType);
+      if (!rowInfo) {
+        errors.push(`${ins.fecha} ${ins.comida}: no se encontró la fila`);
+        continue;
+      }
+      const userCol = this.findUserColumn(sheetData, ins.iniciales);
+      if (!userCol) {
+        errors.push(`${ins.fecha} ${ins.comida} ${ins.iniciales}: usuario no encontrado`);
+        continue;
+      }
+      const range = `${userCol.letter}${rowInfo.row + 1}`;
+      updates.push({ range, value: ins.opcion });
+    }
+
+    if (updates.length === 0) {
+      return { success: errors.length === 0, count: 0, errors };
+    }
+
+    try {
+      await this.callGoogleAppsScript('updateCells', {
+        updates,
+        sheetName: 'Data'
+      });
+      this.clearCache();
+      return { success: true, count: updates.length, errors };
+    } catch (batchError) {
+      const msg = (batchError && batchError.message) || String(batchError);
+      const isUpdateCellsNotRecognized = /updateCells|no reconocida|not recognized/i.test(msg);
+      if (isUpdateCellsNotRecognized) {
+        console.warn('⚠️ El script no tiene la acción updateCells. Guardando celda por celda (fallback). Actualizá el código en Apps Script y creá una nueva versión de la implementación.');
+        let count = 0;
+        for (const ins of inscripciones) {
+          try {
+            await this.saveInscripcion(ins);
+            count++;
+          } catch (err) {
+            errors.push(`${ins.fecha} ${ins.comida}: ${err.message}`);
+          }
+        }
+        return { success: errors.length === 0, count, errors };
+      }
+      throw batchError;
     }
   }
 

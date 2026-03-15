@@ -1,5 +1,6 @@
 // Utilidades para manejo de fechas
 const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const diasSemanaCortos = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 // Configuración (no utilizada actualmente)
@@ -48,6 +49,9 @@ export function formatearFecha(fechaISO, formato = 'completo') {
         return `${dd} ${mes}`;
       case 'semana':
         return `${diaSemana} ${dd}/${mm}`;
+      case 'misa':
+        // Día abreviado + dd/mm (sin año), para modal Misa más angosto
+        return `${diasSemanaCortos[d.getDay()]} ${dd}/${mm}`;
       case 'completo':
       default:
         return `${diaSemana} ${dd}/${mm}/${yyyy}`;

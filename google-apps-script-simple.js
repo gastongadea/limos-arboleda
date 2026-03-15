@@ -44,6 +44,9 @@ function doPost(e) {
       case 'updateCell':
         result = updateCell(spreadsheet, data);
         break;
+      case 'updateCells':
+        result = updateCells(spreadsheet, data);
+        break;
       case 'createRow':
         result = createRow(spreadsheet, data);
         break;
@@ -54,7 +57,7 @@ function doPost(e) {
         return ContentService
           .createTextOutput(JSON.stringify({ 
             error: 'Acción no reconocida: ' + action,
-            availableActions: ['updateCell', 'createRow', 'testConnection']
+            availableActions: ['updateCell', 'updateCells', 'createRow', 'testConnection']
           }))
           .setMimeType(ContentService.MimeType.JSON);
     }
@@ -112,6 +115,27 @@ function updateCell(spreadsheet, data) {
     range: range,
     value: value
   };
+}
+
+function updateCells(spreadsheet, data) {
+  var updates = data.updates;
+  var sheetName = data.sheetName || 'Data';
+  if (!updates || !Array.isArray(updates) || updates.length === 0) {
+    throw new Error('updateCells requiere un array "updates" con al menos un { range, value }');
+  }
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.getSheets()[0];
+  }
+  var applied = 0;
+  for (var i = 0; i < updates.length; i++) {
+    var u = updates[i];
+    if (u.range && u.value !== undefined) {
+      sheet.getRange(u.range).setValue(u.value);
+      applied++;
+    }
+  }
+  return { success: true, count: applied, sheetName: sheet.getName() };
 }
 
 function createRow(spreadsheet, data) {

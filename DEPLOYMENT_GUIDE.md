@@ -82,10 +82,11 @@ jobs:
 ## 🔧 Paso 3: Configurar Google Apps Script
 
 ### 3.1 Crear el Script
-1. Ve a [script.google.com](https://script.google.com)
-2. **Nuevo proyecto**
-3. Copia el contenido de `google-apps-script.js`
-4. **Guardar** y **Implementar** → **Nueva implementación**
+1. Ve a [script.google.com](https://script.google.com) o **Extensiones > Apps Script** en tu planilla.
+2. **Nuevo proyecto** (o abre el proyecto ya vinculado a la planilla).
+3. Copia el contenido de **`google-apps-script.js`** (incluye la acción `updateCells` para guardado en lote).  
+   Si usas otra variante (`google-apps-script-cors-enabled.js`, `google-apps-script-cors-fixed.js`, `google-apps-script-jsonp.js`, etc.), asegurá de que el archivo tenga la acción **`updateCells`**; si no, la app mostrará "Acción no reconocida: updateCells".
+4. **Guardar** y **Implementar** → **Nueva implementación** (o **Gestionar implementaciones** → **Editar** → **Nueva versión**).
 5. **Tipo**: Aplicación web
 6. **Ejecutar como**: Tú mismo
 7. **Quién tiene acceso**: Cualquier persona
@@ -93,6 +94,21 @@ jobs:
 
 ### 3.2 Obtener la URL
 Copia la URL de la implementación y configúrala en Vercel.
+
+### 3.3 Si aparece "Acción no reconocida: updateCells"
+- El script desplegado debe incluir la acción **updateCells** (guardado en lote). Usá una versión actualizada de `google-apps-script.js` o `google-apps-script-cors-enabled.js` del repo, guardá en Apps Script y creá una **nueva versión** de la implementación.
+- **Ejecutar como la cuenta propietaria**: La implementación "Ejecutar como: Yo" usa la cuenta con la que desplegaste. Esa cuenta debe ser **propietaria** de la planilla o tener permiso de **Editor**. Si la planilla es de otro usuario, dale a esa cuenta acceso de editor a la planilla o creá el script desde la misma cuenta que es dueña del Sheet (Extensiones > Apps Script desde la propia planilla).
+- Si seguís con error, en el editor de Apps Script revisá que en el `switch (action)` exista `case 'updateCells':` y la función `updateCells(spreadsheet, data)`.
+
+### 3.4 Depurar con la consola del navegador
+1. Abrí la app en el navegador y abrí **Herramientas de desarrollo** (F12 o clic derecho → Inspeccionar).
+2. Andá a la pestaña **Consola** (Console).
+3. Intentá guardar cambios. Deberías ver mensajes como:
+   - `📤 Action enviada: updateCells` → confirma que la app envía la acción correcta.
+   - `📤 URL (base, para probar en navegador): ...` → podés copiar la URL (completa, sin recortar) y abrirla en otra pestaña para ver la respuesta cruda del script.
+   - Si hay error: `📥 Respuesta del script (error): {...}` → ahí ves exactamente qué devolvió Apps Script.
+4. Si la acción enviada es `updateCells` pero el script responde "no reconocida", el código desplegado en Apps Script **no tiene** el `case 'updateCells'`. Copiá de nuevo el archivo `google-apps-script-cors-enabled.js` del repo en el editor, guardá y creá una **nueva versión** de la implementación (Implementar → Gestionar implementaciones → Editar → Nueva versión → Desplegar).
+5. La app tiene **fallback**: si el script no reconoce `updateCells`, guarda celda por celda (`updateCell`), así podés seguir usando la app mientras corregís el script.
 
 ## 🔧 Paso 4: Configurar Google Sheets
 

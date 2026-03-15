@@ -50,7 +50,7 @@ if (process.env.NODE_ENV === 'development' && !envVars.REACT_APP_GOOGLE_API_KEY)
   // Solo para desarrollo - REMOVER EN PRODUCCIÓN
   envVars.REACT_APP_GOOGLE_API_KEY = 'AIzaSyDgOo8w4Y-YBLmD_w4R0tscQ60JMZXs7xc';
   envVars.REACT_APP_GOOGLE_SHEET_ID = '1WrFLSer4NyYDjmuPqvyhagsWfoAr1NkgY7HQyHjF7a8';
-  envVars.REACT_APP_GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw2gmgiHq8kqtlm8MKpKMxM7RdeKSYvsW1D31AyolTlYBt9_pHkfauRyt6xq6K5XyQMnw/exec';
+  envVars.REACT_APP_GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_-K4jZQBuH8gsNMDjPZX-lCzRnhadpBwKLv5MdBcoAUfFH5vrKjIdjYWsZgTgvPOl/exec';
 }
 
 // Función para obtener una variable específica

@@ -46,6 +46,9 @@ function doPost(e) {
       case 'updateCell':
         result = updateCell(spreadsheet, data);
         break;
+      case 'updateCells':
+        result = updateCells(spreadsheet, data);
+        break;
       case 'createRow':
         result = createRow(spreadsheet, data);
         break;
@@ -128,6 +131,28 @@ function updateCell(spreadsheet, data) {
     message: `Celda ${range} actualizada con valor: ${value}`,
     sheetName: sheet.getName()
   };
+}
+
+// Actualizar varias celdas en una sola llamada (menos delay desde la app)
+function updateCells(spreadsheet, data) {
+  var updates = data.updates;
+  var sheetName = data.sheetName || 'Data';
+  if (!updates || !Array.isArray(updates) || updates.length === 0) {
+    throw new Error('updateCells requiere un array "updates" con al menos un { range, value }');
+  }
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.getSheets()[0];
+  }
+  var applied = 0;
+  for (var i = 0; i < updates.length; i++) {
+    var u = updates[i];
+    if (u.range && u.value !== undefined) {
+      sheet.getRange(u.range).setValue(u.value);
+      applied++;
+    }
+  }
+  return { success: true, count: applied, sheetName: sheet.getName() };
 }
 
 // Función para crear una nueva fila

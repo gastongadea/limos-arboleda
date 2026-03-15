@@ -786,13 +786,15 @@ function App() {
         console.log('ℹ️ Google Sheets no está configurado, solo guardando localmente');
       }
       
+      const configWrite = googleSheetsService.isConfigured().write;
+      const inscripcionesToSync = [];
+
       console.log('🔄 Procesando días y comidas...');
       for (const dia of dias) {
         for (const comida of ['Almuerzo', 'Cena']) {
           const opcion = seleccion[dia]?.[comida] || '';
           console.log(`📝 Procesando ${dia} ${comida}: "${opcion}"`);
           
-          // Procesar tanto comidas marcadas como desmarcadas
           const inscripcion = {
             fecha: dia,
             comida,
@@ -801,14 +803,10 @@ function App() {
             opcion,
           };
           
-          // Verificar si el valor ha cambiado comparando con datos originales
           const valorOriginal = datosOriginales[dia]?.[comida] || '';
           const haCambiado = valorOriginal !== opcion;
           console.log(`🔄 ${dia} ${comida} - Cambió: ${haCambiado} (era: "${valorOriginal}", ahora: "${opcion}")`);
-          console.log(`🔍 DEBUG - datosOriginales[${dia}]:`, datosOriginales[dia]);
-          console.log(`🔍 DEBUG - seleccion[${dia}]:`, seleccion[dia]);
           
-          // Solo guardar en localStorage si hay un valor o si había un valor antes
           if (opcion || valorOriginal) {
             console.log('💾 Guardando inscripción:', inscripcion);
             if (localStorageService.saveInscripcion(inscripcion)) {
@@ -819,37 +817,32 @@ function App() {
               console.log('❌ Error al guardar localmente:', inscripcion);
             }
             
-            // Verificar configuración de Google Sheets
-            const config = googleSheetsService.isConfigured();
-            console.log(`🔍 DEBUG - Google Sheets configurado:`, config);
-            
-            // Guardar en Google Sheets solo si ha cambiado
-            if (config.write && haCambiado) {
-              try {
-                console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorOriginal}")`);
-                await googleSheetsService.saveInscripcion(inscripcion);
-                console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
-                
-                // Actualizar datos originales SOLO para esta comida específica después de sincronizar exitosamente
-                setDatosOriginales(prev => ({
-                  ...prev,
-                  [dia]: {
-                    ...prev[dia],
-                    [comida]: opcion
-                  }
-                }));
-                
-                // registrosGuardados++; // Variable no utilizada
-              } catch (error) {
-                console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
-                errores.push(`Error en ${dia} ${comida}: ${error.message}`);
-              }
-            } else if (googleSheetsService.isConfigured() && !haCambiado) {
+            if (configWrite && haCambiado) {
+              inscripcionesToSync.push(inscripcion);
+            } else if (googleSheetsService.isConfigured().write && !haCambiado) {
               console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
             }
           } else {
             console.log(`⏭️ ${dia} ${comida} - Sin valor, saltando...`);
           }
+        }
+      }
+
+      // Una sola llamada en lote a la planilla (menos delay y menos fallos)
+      if (inscripcionesToSync.length > 0) {
+        try {
+          console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios en Google Sheets (lote)...`);
+          const result = await googleSheetsService.saveInscripcionesBatch(inscripcionesToSync);
+          if (result.errors && result.errors.length > 0) {
+            errores.push(...result.errors);
+          }
+          if (result.success && result.count > 0) {
+            setDatosOriginales(seleccion);
+            console.log(`✅ Sincronizado en planilla: ${result.count} celdas`);
+          }
+        } catch (error) {
+          console.error('❌ Error sincronizando lote en Google Sheets:', error);
+          errores.push(`Planilla: ${error.message}`);
         }
       }
 
@@ -1096,10 +1089,11 @@ function App() {
               }
             }
             
+            const configWrite = googleSheetsService.isConfigured().write;
+            const inscripcionesToSync = [];
             for (const dia of dias) {
               for (const comida of ['Almuerzo', 'Cena']) {
                 const opcion = seleccion[dia]?.[comida] || '';
-                // Procesar tanto comidas marcadas como desmarcadas
                 const inscripcion = {
                   fecha: dia,
                   comida,
@@ -1107,12 +1101,8 @@ function App() {
                   tipoUsuario,
                   opcion,
                 };
-                
-                // Verificar si el valor ha cambiado
                 const valorExistente = datosExistentes[dia]?.[comida] || '';
                 const haCambiado = valorExistente !== opcion;
-                
-                // Solo guardar en localStorage si hay un valor o si había un valor antes
                 if (opcion || valorExistente) {
                   console.log('💾 Guardando inscripción:', inscripcion);
                   if (localStorageService.saveInscripcion(inscripcion)) {
@@ -1122,21 +1112,25 @@ function App() {
                     errores.push(`Error al guardar ${dia} ${comida} localmente`);
                     console.log('❌ Error al guardar localmente:', inscripcion);
                   }
-                  
-                  // Guardar en Google Sheets solo si ha cambiado
-                  if (googleSheetsService.isConfigured() && haCambiado) {
-                    try {
-                      console.log(`🔄 Sincronizando cambio en Google Sheets: ${dia} ${comida} - ${iniciales} = ${opcion} (era: "${valorExistente}")`);
-                      await googleSheetsService.saveInscripcion(inscripcion);
-                      console.log(`✅ Sincronizado exitosamente en Google Sheets: ${dia} ${comida}`);
-                    } catch (error) {
-                      console.error(`❌ Error sincronizando en Google Sheets: ${dia} ${comida}`, error);
-                      errores.push(`Error en ${dia} ${comida}: ${error.message}`);
-                    }
-                  } else if (googleSheetsService.isConfigured() && !haCambiado) {
+                  if (configWrite && haCambiado) {
+                    inscripcionesToSync.push(inscripcion);
+                  } else if (googleSheetsService.isConfigured().write && !haCambiado) {
                     console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
                   }
                 }
+              }
+            }
+            if (inscripcionesToSync.length > 0) {
+              try {
+                console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios en Google Sheets (lote)...`);
+                const result = await googleSheetsService.saveInscripcionesBatch(inscripcionesToSync);
+                if (result.errors && result.errors.length > 0) errores.push(...result.errors);
+                if (result.success && result.count > 0) {
+                  console.log(`✅ Sincronizado en planilla: ${result.count} celdas`);
+                }
+              } catch (error) {
+                console.error('❌ Error sincronizando lote en Google Sheets:', error);
+                errores.push(`Planilla: ${error.message}`);
               }
             }
             
@@ -2671,10 +2665,10 @@ function App() {
         onRequestClose={() => setShowMisaModal(false)}
         style={{
           content: {
-            maxWidth: 520,
+            maxWidth: 340,
             maxHeight: '85vh',
             margin: 'auto',
-            padding: 24,
+            padding: 20,
             borderRadius: 'var(--border-radius)',
             zIndex: 9999,
             background: 'linear-gradient(180deg, #faf5ff 0%, #fff 100%)',
@@ -2742,8 +2736,8 @@ function App() {
                 borderRadius: '8px',
               }}
             >
-              <span style={{ fontWeight: '600', color: '#2c1810', minWidth: '140px' }}>
-                {formatearFecha(dia)}
+              <span style={{ fontWeight: '600', color: '#2c1810', minWidth: '72px' }}>
+                {formatearFecha(dia, 'misa')}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 {opcionesMisa.map(op => {
