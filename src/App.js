@@ -37,6 +37,9 @@ const opcionesCena = [
 const opcionesMisa = ['S', 'N', 'A'];
 const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+/** Botón "7+" junto a R: copia últimos 7 días con comidas a los 7 siguientes (`handleRepetirSemana`). Poné `true` para volver a mostrarlo. */
+const MOSTRAR_BOTON_7_PLUS = false;
+
 // Constantes de configuración
 const CONFIG = {
   CLAVE_ADMIN: 'admin123',
@@ -1315,49 +1318,45 @@ function App() {
       console.log('Setting actualizandoComidas to true');
       setActualizandoComidas(true);
 
-      // 1) Obtener inscripciones del usuario desde almacenamiento (pueden incluir días pasados)
-      console.log('Getting inscriptions for user:', iniciales);
-      const inscripcionesUsuario = localStorageService.getInscripcionesByIniciales(iniciales) || [];
-      console.log('Found inscriptions:', inscripcionesUsuario.length);
-      if (inscripcionesUsuario.length === 0) {
-        console.log('No inscriptions found, showing warning');
-        mostrarMensaje('No hay inscripciones previas para copiar', 'warning');
-        return;
-      }
-
-      // 2) Armar mapa fecha -> { Almuerzo, Cena } desde LocalStorage
+      // 1) Armar mapa fecha -> { Almuerzo, Cena } únicamente desde la planilla actual
+      //    (la planilla es la fuente de verdad; si se borró algo manualmente, se respeta)
       const porFecha = {};
-      for (const item of inscripcionesUsuario) {
-        const fechaISO = item.fecha;
-        if (!porFecha[fechaISO]) porFecha[fechaISO] = { Almuerzo: '', Cena: '' };
-        if (item.comida === 'Almuerzo') porFecha[fechaISO].Almuerzo = item.opcion ?? '';
-        if (item.comida === 'Cena') porFecha[fechaISO].Cena = item.opcion ?? '';
-      }
-
-      // 2.b) Si Google Sheets está configurado para lectura, fusionar con histórico de Sheets (incluye días pasados no visibles)
       try {
         const cfg = googleSheetsService.isConfigured();
-        if (cfg && cfg.read) {
-          const sheetData = await googleSheetsService.getSheetData();
-          const userCol = googleSheetsService.findUserColumn(sheetData, iniciales);
-          if (userCol) {
-            for (let row = 1; row < sheetData.length; row++) {
-              const rowData = sheetData[row];
-              if (!rowData || rowData.length < 3) continue;
-              const fechaISO = googleSheetsService.parseDate(rowData[1]);
-              const tipo = rowData[2] ? rowData[2].toString().trim().toUpperCase() : '';
-              if (!fechaISO || (tipo !== 'A' && tipo !== 'C')) continue;
-              const valor = rowData[userCol.col] ? rowData[userCol.col].toString().trim() : '';
-              if (!porFecha[fechaISO]) porFecha[fechaISO] = { Almuerzo: '', Cena: '' };
-              if (valor !== '') {
-                if (tipo === 'A') porFecha[fechaISO].Almuerzo = porFecha[fechaISO].Almuerzo || valor;
-                if (tipo === 'C') porFecha[fechaISO].Cena = porFecha[fechaISO].Cena || valor;
-              }
-            }
-          }
+        if (!cfg || !cfg.read) {
+          console.log('Sheets no configurado para lectura, aborting x7');
+          mostrarMensaje('La función x7 requiere conexión de lectura a la planilla', 'warning');
+          return;
         }
+
+        console.log('Leyendo inscripciones históricas desde Google Sheets para:', iniciales);
+        const sheetData = await googleSheetsService.getSheetData();
+        const userCol = googleSheetsService.findUserColumn(sheetData, iniciales);
+        if (!userCol) {
+          console.log('No se encontró columna para usuario en la planilla');
+          mostrarMensaje('No se encontraron datos en la planilla para este usuario', 'warning');
+          return;
+        }
+
+        for (let row = 1; row < sheetData.length; row++) {
+          const rowData = sheetData[row];
+          if (!rowData || rowData.length < 3) continue;
+          const fechaISO = googleSheetsService.parseDate(rowData[1]);
+          const tipo = rowData[2] ? rowData[2].toString().trim().toUpperCase() : '';
+          if (!fechaISO || (tipo !== 'A' && tipo !== 'C')) continue;
+          const valor = rowData[userCol.col] ? rowData[userCol.col].toString().trim() : '';
+          if (!valor) continue; // si la celda está vacía en Sheets, la consideramos vacía
+
+          if (!porFecha[fechaISO]) porFecha[fechaISO] = { Almuerzo: '', Cena: '' };
+          if (tipo === 'A') porFecha[fechaISO].Almuerzo = valor;
+          if (tipo === 'C') porFecha[fechaISO].Cena = valor;
+        }
+
+        console.log('Mapa porFecha construido SOLO desde Google Sheets:', porFecha);
       } catch (e) {
-        console.warn('No se pudieron leer inscripciones históricas de Google Sheets:', e);
+        console.warn('Error leyendo inscripciones desde Google Sheets para x7:', e);
+        mostrarMensaje('No se pudieron leer las inscripciones desde la planilla', 'error');
+        return;
       }
 
       // 3) Fechas con alguna selección hecha
@@ -1731,7 +1730,7 @@ function App() {
               width: '100%'
             }}>
               <h3 style={{ margin: 0, color: 'var(--primary-color)', fontSize: '16px' }}>
-                👥 Selecciona tus iniciales
+                👥 Iniciales
               </h3>
               
               {/* Botón Hoy - solo visible cuando se muestran todas las iniciales y no se está mostrando la vista Hoy */}
@@ -1857,6 +1856,42 @@ function App() {
               >
                 R
               </button>
+
+              {MOSTRAR_BOTON_7_PLUS && (
+                <button
+                  type="button"
+                  onClick={handleRepetirSemana}
+                  title="Copiar los últimos 7 días con comidas a los 7 días siguientes"
+                  style={{
+                    fontSize: '13px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: '2px solid #e8d5c4',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    background: 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+                    color: '#2c1810',
+                    boxShadow: 'none',
+                    marginLeft: '6px',
+                    minWidth: '40px',
+                    fontWeight: 'bold'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+                    e.target.style.borderColor = '#1976d2';
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+                    e.target.style.borderColor = '#e8d5c4';
+                    e.target.style.transform = 'none';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  7+
+                </button>
+              )}
 
               {/* Mensajes de estado en el centro */}
               <div style={{
