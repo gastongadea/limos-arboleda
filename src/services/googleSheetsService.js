@@ -208,15 +208,15 @@ class GoogleSheetsService {
         console.warn('⚠️ URL muy larga (' + url.length + ' caracteres). Si falla, el script puede no recibir bien los datos.');
       }
 
-      const data = await this._jsonpRequest(url, 10000);
-      console.log('✅ Respuesta directa de Google Apps Script:', data);
+      const scriptResult = await this._jsonpRequest(url, 10000);
+      console.log('✅ Respuesta directa de Google Apps Script:', scriptResult);
 
-      if (data.success === false) {
-        console.error('📥 Respuesta del script (error):', data);
-        throw new Error(`Error en Apps Script: ${data.error || 'Error desconocido'}`);
+      if (scriptResult.success === false) {
+        console.error('📥 Respuesta del script (error):', scriptResult);
+        throw new Error(`Error en Apps Script: ${scriptResult.error || 'Error desconocido'}`);
       }
-      console.log('📥 Respuesta del script (éxito):', data);
-      return data;
+      console.log('📥 Respuesta del script (éxito):', scriptResult);
+      return scriptResult;
       
     } catch (error) {
       console.error('Error llamando Google Apps Script:', error);
