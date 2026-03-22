@@ -36,6 +36,69 @@ class GoogleSheetsService {
     return { read: readConfigured, write: writeConfigured };
   }
 
+  /**
+   * Una petición JSONP a Apps Script. `onerror` del &lt;script&gt; es a veces intermitente
+   * (red, extensiones, varias peticiones a la vez); se reintenta una vez antes de fallar.
+   */
+  _jsonpRequestOnce(urlWithQuery, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      const callbackName = 'jsonpCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      let isCompleted = false;
+
+      const cleanup = () => {
+        if (isCompleted) return;
+        isCompleted = true;
+        try {
+          if (script.parentNode) {
+            document.head.removeChild(script);
+          }
+        } catch (e) {
+          console.warn('Error limpiando script JSONP:', e);
+        }
+        try {
+          delete window[callbackName];
+        } catch (e) {
+          console.warn('Error eliminando callback JSONP:', e);
+        }
+      };
+
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Timeout en petición JSONP'));
+      }, timeoutMs);
+
+      window[callbackName] = (data) => {
+        cleanup();
+        clearTimeout(timeout);
+        resolve(data);
+      };
+
+      const jsonpUrl = `${urlWithQuery}&callback=${encodeURIComponent(callbackName)}`;
+      script.src = jsonpUrl;
+      script.onerror = () => {
+        cleanup();
+        clearTimeout(timeout);
+        reject(new Error('Error cargando script JSONP'));
+      };
+
+      document.head.appendChild(script);
+    });
+  }
+
+  async _jsonpRequest(urlWithQuery, timeoutMs = 10000) {
+    try {
+      return await this._jsonpRequestOnce(urlWithQuery, timeoutMs);
+    } catch (first) {
+      if (first.message !== 'Error cargando script JSONP') {
+        throw first;
+      }
+      console.warn('JSONP: primer intento falló (carga del script), reintentando una vez...');
+      await new Promise((r) => setTimeout(r, 400));
+      return this._jsonpRequestOnce(urlWithQuery, timeoutMs);
+    }
+  }
+
   // Verificar si Google Apps Script está funcionando
   async testGoogleAppsScript() {
     try {
@@ -56,56 +119,8 @@ class GoogleSheetsService {
       const url = `${this.appsScriptUrl}?${params.toString()}`;
       console.log('URL de petición test:', url);
       
-             // Usar JSONP para evitar CORS completamente
-       return new Promise((resolve, reject) => {
-         const script = document.createElement('script');
-         const callbackName = 'jsonpCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-         let isCompleted = false;
-         
-         // Función de limpieza segura
-         const cleanup = () => {
-           if (isCompleted) return;
-           isCompleted = true;
-           
-           try {
-             if (script.parentNode) {
-               document.head.removeChild(script);
-             }
-           } catch (e) {
-             console.warn('Error limpiando script JSONP:', e);
-           }
-           
-           try {
-             delete window[callbackName];
-           } catch (e) {
-             console.warn('Error eliminando callback JSONP:', e);
-           }
-         };
-         
-         // Crear función de callback global
-         window[callbackName] = function(data) {
-           cleanup();
-           clearTimeout(timeout);
-           resolve({ working: true, data: data });
-         };
-         
-         // Configurar timeout
-         const timeout = setTimeout(() => {
-           cleanup();
-           reject(new Error('Timeout en petición JSONP'));
-         }, 10000);
-         
-         // Crear URL con callback
-         const jsonpUrl = `${url}&callback=${callbackName}`;
-         script.src = jsonpUrl;
-         script.onerror = () => {
-           cleanup();
-           clearTimeout(timeout);
-           reject(new Error('Error cargando script JSONP'));
-         };
-         
-         document.head.appendChild(script);
-       });
+      const data = await this._jsonpRequest(url, 10000);
+      return { working: true, data };
     } catch (error) {
       return { working: false, error: error.message };
     }
@@ -192,66 +207,16 @@ class GoogleSheetsService {
       if (url.length > 2000) {
         console.warn('⚠️ URL muy larga (' + url.length + ' caracteres). Si falla, el script puede no recibir bien los datos.');
       }
-      
-             // Usar JSONP para evitar CORS completamente
-       return new Promise((resolve, reject) => {
-         const script = document.createElement('script');
-         const callbackName = 'jsonpCallback_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-         let isCompleted = false;
-         
-         // Función de limpieza segura
-         const cleanup = () => {
-           if (isCompleted) return;
-           isCompleted = true;
-           
-           try {
-             if (script.parentNode) {
-               document.head.removeChild(script);
-             }
-           } catch (e) {
-             console.warn('Error limpiando script JSONP:', e);
-           }
-           
-           try {
-             delete window[callbackName];
-           } catch (e) {
-             console.warn('Error eliminando callback JSONP:', e);
-           }
-         };
-         
-         // Crear función de callback global
-         window[callbackName] = function(data) {
-           cleanup();
-           clearTimeout(timeout);
-           console.log('✅ Respuesta directa de Google Apps Script:', data);
-           
-           // Verificar si la operación fue exitosa
-           if (data.success === false) {
-             console.error('📥 Respuesta del script (error):', data);
-             reject(new Error(`Error en Apps Script: ${data.error || 'Error desconocido'}`));
-           } else {
-             console.log('📥 Respuesta del script (éxito):', data);
-             resolve(data);
-           }
-         };
-         
-         // Configurar timeout
-         const timeout = setTimeout(() => {
-           cleanup();
-           reject(new Error('Timeout en petición JSONP'));
-         }, 10000);
-         
-         // Crear URL con callback
-         const jsonpUrl = `${url}&callback=${callbackName}`;
-         script.src = jsonpUrl;
-         script.onerror = () => {
-           cleanup();
-           clearTimeout(timeout);
-           reject(new Error('Error cargando script JSONP'));
-         };
-         
-         document.head.appendChild(script);
-       });
+
+      const data = await this._jsonpRequest(url, 10000);
+      console.log('✅ Respuesta directa de Google Apps Script:', data);
+
+      if (data.success === false) {
+        console.error('📥 Respuesta del script (error):', data);
+        throw new Error(`Error en Apps Script: ${data.error || 'Error desconocido'}`);
+      }
+      console.log('📥 Respuesta del script (éxito):', data);
+      return data;
       
     } catch (error) {
       console.error('Error llamando Google Apps Script:', error);
