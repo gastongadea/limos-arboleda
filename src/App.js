@@ -2424,16 +2424,15 @@ function App() {
           </div>
         )}
         
-        {/* Estado de sincronización */}
-        {(syncStatus || actualizandoComidas) && (
+        {/* Estado de sincronización (evitar redundancia con "🔄 Esperá...") */}
+        {syncStatus && !actualizandoComidas && (
           <div style={{ 
             fontSize: '14px', 
-            color: syncStatus.includes('Error') ? 'var(--error-color)' : 
-                   actualizandoComidas ? 'var(--accent-color)' : 'var(--primary-color)',
+            color: syncStatus.includes('Error') ? 'var(--error-color)' : 'var(--primary-color)',
             marginBottom: '8px',
             fontWeight: 'bold'
           }}>
-            {actualizandoComidas ? 'Actualizando cambios...' : syncStatus}
+            {syncStatus}
           </div>
         )}
         
