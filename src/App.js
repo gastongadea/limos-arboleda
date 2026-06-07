@@ -512,9 +512,19 @@ function App() {
     return opcion !== 'N' && opcion !== 'VRM' && opcion !== '';
   }, []);
 
-  // Función auxiliar para contar todas las opciones válidas según la regla anterior
+  // Función auxiliar para contar comensales: Invitados/Plan suman su cantidad numérica
   const contarOpcionesValidas = useCallback((inscripciones) => {
-    return inscripciones.filter(esInscripcionValidaSalon).length;
+    return inscripciones.reduce((total, inscripcion) => {
+      if (!esInscripcionValidaSalon(inscripcion)) return total;
+
+      const iniciales = inscripcion.iniciales;
+      if (iniciales === 'Invitados' || iniciales === 'Plan') {
+        const num = parseInt(inscripcion.opcion, 10);
+        return total + (!isNaN(num) && num > 0 ? num : 0);
+      }
+
+      return total + 1;
+    }, 0);
   }, [esInscripcionValidaSalon]);
 
   // Función para obtener los datos de hoy
