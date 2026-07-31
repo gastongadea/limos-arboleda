@@ -49,6 +49,28 @@ const CONFIG = {
   TIMEOUT_SYNC: 10000, // 10 segundos
 };
 
+const COMENSALES_OCULTOS_KEY = 'limos_comensales_ocultos';
+
+function cargarComensalesOcultos() {
+  try {
+    const raw = localStorage.getItem(COMENSALES_OCULTOS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.warn('No se pudieron cargar comensales ocultos:', e);
+    return [];
+  }
+}
+
+function guardarComensalesOcultos(ocultos) {
+  try {
+    localStorage.setItem(COMENSALES_OCULTOS_KEY, JSON.stringify(ocultos));
+  } catch (e) {
+    console.warn('No se pudieron guardar comensales ocultos:', e);
+  }
+}
+
 // Utilidades
 function deducirTipoUsuario(inicial) {
   if (!inicial) return 'Desconocido';
@@ -142,6 +164,36 @@ function App() {
   
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
+
+  // Comensales ocultos en pantalla principal (persistido en localStorage)
+  const [comensalesOcultos, setComensalesOcultos] = useState(() => cargarComensalesOcultos());
+
+  const listaComensales = usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista;
+
+  const toggleComensalVisible = useCallback((ini) => {
+    setComensalesOcultos((prev) => {
+      const next = prev.includes(ini)
+        ? prev.filter((x) => x !== ini)
+        : [...prev, ini];
+      guardarComensalesOcultos(next);
+      return next;
+    });
+  }, []);
+
+  // Si el usuario seleccionado queda oculto, deseleccionarlo
+  useEffect(() => {
+    if (iniciales && comensalesOcultos.includes(iniciales)) {
+      setIniciales('');
+      setSeleccion({});
+      setTieneCambios(false);
+    }
+  }, [comensalesOcultos, iniciales]);
+
+  const setTodosComensalesVisibles = useCallback((visibles) => {
+    const next = visibles ? [] : [...listaComensales];
+    setComensalesOcultos(next);
+    guardarComensalesOcultos(next);
+  }, [listaComensales]);
 
   // Generar días (próximos 60 días desde hoy)
   useEffect(() => {
@@ -2042,7 +2094,9 @@ function App() {
           gap: '8px', 
           marginBottom: 12
         }}>
-          {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).map(ini => {
+          {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista)
+            .filter((ini) => !comensalesOcultos.includes(ini))
+            .map(ini => {
             const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
             const mostrarBoton = !iniciales && !mostrandoAnotadosHoy; // Solo mostrar si no hay selección de iniciales y no se está mostrando la vista Hoy
@@ -2597,7 +2651,7 @@ function App() {
         onRequestClose={handleCloseConfig}
         style={{
           content: {
-            maxWidth: 500,
+            maxWidth: 560,
             margin: 'auto',
             padding: 24,
             borderRadius: 'var(--border-radius)',
@@ -2645,6 +2699,77 @@ function App() {
               Acceso concedido. Herramientas de administración:
             </p>
             
+            <div style={{
+              marginBottom: 20,
+              padding: 16,
+              border: '2px solid #e8d5c4',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
+                <strong style={{ color: 'var(--primary-color)', fontSize: 15 }}>
+                  Mostrar / ocultar comensales
+                </strong>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setTodosComensalesVisibles(true)}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setTodosComensalesVisibles(false)}
+                  >
+                    Ninguno
+                  </button>
+                </div>
+              </div>
+              <p style={{ margin: '0 0 12px 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Destildá para ocultar el botón de iniciales en la pantalla principal.
+              </p>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                gap: 8,
+                maxHeight: 220,
+                overflowY: 'auto',
+              }}>
+                {listaComensales.map((ini) => {
+                  const visible = !comensalesOcultos.includes(ini);
+                  return (
+                    <label
+                      key={ini}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        border: visible ? '1px solid #bbdefb' : '1px solid #eee',
+                        background: visible ? '#e3f2fd' : '#f5f5f5',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: visible ? 600 : 400,
+                        color: visible ? '#1565c0' : '#888',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        onChange={() => toggleComensalVisible(ini)}
+                      />
+                      {ini}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button
                 className="btn btn-warning"
