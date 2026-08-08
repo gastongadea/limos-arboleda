@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "framework": null,
+  "buildCommand": "echo \"API-only deploy (frontend is GitHub Pages)\"",
+  "outputDirectory": "api-public",
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30

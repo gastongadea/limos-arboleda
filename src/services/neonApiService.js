@@ -27,14 +27,22 @@ class NeonApiService {
     if (!this.isConfigured()) {
       throw new Error('REACT_APP_API_URL no configurada');
     }
-    const res = await fetch(this._url(path, options.params), {
-      method: options.method || 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-    });
+    const url = this._url(path, options.params);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: options.method || 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+    } catch (networkErr) {
+      throw new Error(
+        `No se pudo conectar a la API (${url}). Revisá CORS en Vercel y que la URL sea correcta. Detalle: ${networkErr.message}`
+      );
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) {
       throw new Error(data.error || `API ${res.status}`);
