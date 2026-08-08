@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_inscripciones_pending
 CREATE TABLE IF NOT EXISTS misa (
   id BIGSERIAL PRIMARY KEY,
   fecha DATE NOT NULL,
-  valor VARCHAR(5) NOT NULL DEFAULT '',
+  valor TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   synced_at TIMESTAMPTZ,
   CONSTRAINT uq_misa_fecha UNIQUE (fecha)

@@ -1,8 +1,21 @@
 const { setCors, handleOptions } = require('./_lib/cors');
 const { getSql, ensureSchema } = require('./_lib/db');
 
-/** Columna Z = índice 25 (igual que googleSheetsService.COL_MISA) */
-const COL_MISA = 25;
+/** Columna Z = índice 25 (fallback si no hay header "Misa") */
+const COL_MISA_FALLBACK = 25;
+
+function findMisaColumnIndex(headers) {
+  const idx = headers.findIndex(
+    (h) => String(h || '').trim().toLowerCase() === 'misa'
+  );
+  return idx >= 0 ? idx : COL_MISA_FALLBACK;
+}
+
+function normalizeMisaValor(raw) {
+  const v = String(raw == null ? '' : raw).trim().toUpperCase();
+  if (v === 'S' || v === 'N' || v === 'A') return v;
+  return '';
+}
 
 function parseSheetDate(fechaCell) {
   if (!fechaCell) return null;
@@ -106,6 +119,7 @@ module.exports = async function handler(req, res) {
     }
 
     const headers = sheetData[0];
+    const misaCol = findMisaColumnIndex(headers);
     const inscripciones = [];
     const misaRows = [];
 
@@ -119,14 +133,14 @@ module.exports = async function handler(req, res) {
 
       // Misa solo en fila de almuerzo
       if (tipo === 'A') {
-        const misaVal = row[COL_MISA] == null ? '' : String(row[COL_MISA]).trim();
+        const misaVal = normalizeMisaValor(row[misaCol]);
         if (misaVal) {
           misaRows.push({ fecha, valor: misaVal });
         }
       }
 
-      for (let c = 3; c < headers.length; c++) {
-        if (c === COL_MISA) continue;
+      for (let c = 3; c < Math.max(headers.length, row.length); c++) {
+        if (c === misaCol) continue;
         const iniciales = String(headers[c] || '').trim();
         if (!iniciales || iniciales.toLowerCase() === 'misa') continue;
         const opcion = row[c] == null ? '' : String(row[c]).trim();
