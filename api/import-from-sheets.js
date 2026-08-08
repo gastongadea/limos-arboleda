@@ -1,6 +1,9 @@
 const { setCors, handleOptions } = require('./_lib/cors');
 const { getSql, ensureSchema } = require('./_lib/db');
 
+/** Columna Z = índice 25 (igual que googleSheetsService.COL_MISA) */
+const COL_MISA = 25;
+
 function parseSheetDate(fechaCell) {
   if (!fechaCell) return null;
   const s = String(fechaCell).trim();
@@ -13,6 +16,55 @@ function parseSheetDate(fechaCell) {
   }
   if (s.includes('-') && s.length >= 10) return s.slice(0, 10);
   return null;
+}
+
+async function bulkUpsertInscripciones(db, rows) {
+  if (!rows.length) return 0;
+  // Lotes para no pasar el límite de parámetros / tiempo
+  const chunkSize = 200;
+  let total = 0;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const fechas = chunk.map((r) => r.fecha);
+    const comidas = chunk.map((r) => r.comida);
+    const iniciales = chunk.map((r) => r.iniciales);
+    const opciones = chunk.map((r) => r.opcion);
+
+    await db`
+      INSERT INTO inscripciones (fecha, comida, iniciales, opcion, updated_at, synced_at)
+      SELECT f::date, c, i, o, NOW(), NOW()
+      FROM UNNEST(
+        ${fechas}::text[],
+        ${comidas}::text[],
+        ${iniciales}::text[],
+        ${opciones}::text[]
+      ) AS t(f, c, i, o)
+      ON CONFLICT (fecha, comida, iniciales)
+      DO UPDATE SET
+        opcion = EXCLUDED.opcion,
+        updated_at = NOW(),
+        synced_at = NOW()
+    `;
+    total += chunk.length;
+  }
+  return total;
+}
+
+async function bulkUpsertMisa(db, rows) {
+  if (!rows.length) return 0;
+  const fechas = rows.map((r) => r.fecha);
+  const valores = rows.map((r) => r.valor);
+  await db`
+    INSERT INTO misa (fecha, valor, updated_at, synced_at)
+    SELECT f::date, v, NOW(), NOW()
+    FROM UNNEST(${fechas}::text[], ${valores}::text[]) AS t(f, v)
+    ON CONFLICT (fecha)
+    DO UPDATE SET
+      valor = EXCLUDED.valor,
+      updated_at = NOW(),
+      synced_at = NOW()
+  `;
+  return rows.length;
 }
 
 module.exports = async function handler(req, res) {
@@ -33,12 +85,13 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Faltan GOOGLE_API_KEY / GOOGLE_SHEET_ID' });
     }
 
+    // Rango amplio: hasta columna Z (Misa) y muchas filas
     let response = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Data!A1:Z1000?key=${apiKey}`
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Data!A1:Z5000?key=${apiKey}`
     );
     if (!response.ok) {
       response = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:Z1000?key=${apiKey}`
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:Z5000?key=${apiKey}`
       );
     }
     if (!response.ok) {
@@ -49,11 +102,12 @@ module.exports = async function handler(req, res) {
     const json = await response.json();
     const sheetData = json.values || [];
     if (sheetData.length < 2) {
-      return res.status(200).json({ success: true, imported: 0, message: 'Sin filas' });
+      return res.status(200).json({ success: true, imported: 0, misa: 0, message: 'Sin filas' });
     }
 
     const headers = sheetData[0];
-    let imported = 0;
+    const inscripciones = [];
+    const misaRows = [];
 
     for (let r = 1; r < sheetData.length; r++) {
       const row = sheetData[r];
@@ -63,26 +117,33 @@ module.exports = async function handler(req, res) {
       if (!fecha || (tipo !== 'A' && tipo !== 'C')) continue;
       const comida = tipo === 'A' ? 'Almuerzo' : 'Cena';
 
+      // Misa solo en fila de almuerzo
+      if (tipo === 'A') {
+        const misaVal = row[COL_MISA] == null ? '' : String(row[COL_MISA]).trim();
+        if (misaVal) {
+          misaRows.push({ fecha, valor: misaVal });
+        }
+      }
+
       for (let c = 3; c < headers.length; c++) {
+        if (c === COL_MISA) continue;
         const iniciales = String(headers[c] || '').trim();
         if (!iniciales || iniciales.toLowerCase() === 'misa') continue;
         const opcion = row[c] == null ? '' : String(row[c]).trim();
         if (opcion === '') continue;
-
-        await db`
-          INSERT INTO inscripciones (fecha, comida, iniciales, opcion, updated_at, synced_at)
-          VALUES (${fecha}::date, ${comida}, ${iniciales}, ${opcion}, NOW(), NOW())
-          ON CONFLICT (fecha, comida, iniciales)
-          DO UPDATE SET
-            opcion = EXCLUDED.opcion,
-            updated_at = NOW(),
-            synced_at = NOW()
-        `;
-        imported += 1;
+        inscripciones.push({ fecha, comida, iniciales, opcion });
       }
     }
 
-    return res.status(200).json({ success: true, imported });
+    const imported = await bulkUpsertInscripciones(db, inscripciones);
+    const misaImported = await bulkUpsertMisa(db, misaRows);
+
+    return res.status(200).json({
+      success: true,
+      imported,
+      misa: misaImported,
+      sheetRows: sheetData.length - 1,
+    });
   } catch (error) {
     console.error('import-from-sheets error:', error);
     return res.status(500).json({ success: false, error: error.message });

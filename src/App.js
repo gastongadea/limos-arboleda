@@ -587,6 +587,7 @@ function App() {
       if (dataService.usesNeon()) {
         console.log('Obteniendo datos de Neon para hoy...');
         const rows = await neonApiService.getInscripcionesByDate(hoy);
+        if (rows && rows.length > 0) {
         rows.forEach((row) => {
           const opcion = row.opcion || '';
           if (!opcion) return;
@@ -640,6 +641,8 @@ function App() {
         setMostrandoAnotadosHoy(true);
         setShowHoy(false);
         return;
+        }
+        console.warn('Neon sin datos de hoy; cayendo a Sheets');
       }
 
       console.log('Obteniendo datos de Google Sheets para hoy...');
