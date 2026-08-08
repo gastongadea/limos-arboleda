@@ -207,6 +207,7 @@ o el botón **Sync Neon → planilla** en Configuración.
 | App sigue lenta / Sheets | Falta `REACT_APP_API_URL` o meta `api-url` |
 | Sync falla “fila no encontrada” | Falta la fecha A/C en la hoja Data; el sync no crea filas nuevas aún |
 | CORS en el navegador | Agregá `CORS_ORIGINS=https://gastongadea.github.io` en Vercel |
+| Error de cron `*/2 * * * *` en Hobby | El plan gratis solo permite **1 cron por día**. Ya está en `0 9 * * *`. El sync al guardar y el botón manual cubren el día a día |
 
 ---
 
