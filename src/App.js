@@ -3,6 +3,8 @@ import { flushSync } from 'react-dom';
 import Modal from 'react-modal';
 import localStorageService from './services/localStorageService';
 import googleSheetsService from './services/googleSheetsService';
+import dataService from './services/dataService';
+import neonApiService from './services/neonApiService';
 import { formatearFecha, esFinDeSemana, agregarDias, diferenciaDias } from './utils/dateUtils';
 import StatsComponent from './components/StatsComponent';
 import GoogleSheetsTest from './components/GoogleSheetsTest';
@@ -241,10 +243,10 @@ function App() {
 
   // Cargar Misa próximos 8 días para la barra principal
   const cargarMisaProximos7 = useCallback(async () => {
-    if (dias.length < 8 || !googleSheetsService.isConfigured()) return;
+    if (dias.length < 8 || !dataService.isConfigured().read) return;
     const proximos7 = dias.slice(0, 8);
     try {
-      const data = await googleSheetsService.getMisaInscripciones(proximos7);
+      const data = await dataService.getMisaInscripciones(proximos7);
       setMisaProximos7(data);
     } catch (e) {
       console.warn('Error cargando Misa próximos 8:', e);
@@ -289,30 +291,23 @@ function App() {
       try {
         let nuevaSel = {};
         
-        if (googleSheetsService.isConfigured()) {
-          // Cargar desde Google Sheets con timeout
-          const timeoutPromise = new Promise((_, reject) => 
+        if (dataService.isConfigured().read) {
+          const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Timeout al cargar datos')), CONFIG.TIMEOUT_SYNC)
           );
-          
-          const dataPromise = googleSheetsService.getUserInscripciones(iniciales, dias);
-          
+          const dataPromise = dataService.getUserInscripciones(iniciales, dias);
           nuevaSel = await Promise.race([dataPromise, timeoutPromise]);
           setSyncStatus('');
         } else {
           // Cargar desde localStorage
           dias.forEach(dia => {
             const inscripcionesDia = localStorageService.getInscripcionesByDate(dia);
-            const inscripcionUsuario = inscripcionesDia.find(item => item.iniciales === iniciales);
-            
-            if (inscripcionUsuario) {
-              nuevaSel[dia] = {
-                Almuerzo: inscripcionUsuario.opcion || '',
-                Cena: inscripcionUsuario.opcion || ''
-              };
-            } else {
-              nuevaSel[dia] = { Almuerzo: '', Cena: '' };
-            }
+            const almuerzo = inscripcionesDia.find(item => item.iniciales === iniciales && item.comida === 'Almuerzo');
+            const cena = inscripcionesDia.find(item => item.iniciales === iniciales && item.comida === 'Cena');
+            nuevaSel[dia] = {
+              Almuerzo: almuerzo?.opcion || '',
+              Cena: cena?.opcion || '',
+            };
           });
           setSyncStatus('');
         }
@@ -588,6 +583,65 @@ function App() {
       const almuerzo = [];
       const cena = [];
 
+      // Preferir Neon si está configurado (más rápido)
+      if (dataService.usesNeon()) {
+        console.log('Obteniendo datos de Neon para hoy...');
+        const rows = await neonApiService.getInscripcionesByDate(hoy);
+        rows.forEach((row) => {
+          const opcion = row.opcion || '';
+          if (!opcion) return;
+          const inscripcion = {
+            iniciales: row.iniciales,
+            opcion,
+            comida: row.comida,
+          };
+          if (row.comida === 'Almuerzo') almuerzo.push(inscripcion);
+          else if (row.comida === 'Cena') cena.push(inscripcion);
+        });
+
+        const ordenarInscripciones = (inscripciones) => {
+          const orden = { 'V': 1, '12': 2, 'S': 3, 'R': 3, 'N': 3, 'T': 4, 'RT': 4, 'VRM': 4, 'VM': 4 };
+          return inscripciones.sort((a, b) => {
+            const ordenA = orden[a.opcion] || 5;
+            const ordenB = orden[b.opcion] || 5;
+            if (ordenA !== ordenB) return ordenA - ordenB;
+            return a.iniciales.localeCompare(b.iniciales);
+          });
+        };
+
+        const almuerzoOrdenado = ordenarInscripciones(almuerzo);
+        const almuerzoFormateado = almuerzoOrdenado
+          .filter((inscripcion) => esInscripcionValidaSalon(inscripcion))
+          .map((inscripcion) => {
+            if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
+              return `${inscripcion.iniciales} (${inscripcion.opcion})`;
+            }
+            const particularidad = obtenerParticularidad(inscripcion.opcion);
+            return `${inscripcion.iniciales}${particularidad}`;
+          });
+
+        const cenaOrdenada = ordenarInscripciones(cena);
+        const cenaFormateada = cenaOrdenada
+          .filter((inscripcion) => esInscripcionValidaSalon(inscripcion))
+          .map((inscripcion) => {
+            if (inscripcion.iniciales === 'Invitados' || inscripcion.iniciales === 'Plan') {
+              return `${inscripcion.iniciales} (${inscripcion.opcion})`;
+            }
+            const particularidad = obtenerParticularidad(inscripcion.opcion);
+            return `${inscripcion.iniciales}${particularidad}`;
+          });
+
+        setDatosHoy({
+          almuerzo: almuerzoFormateado,
+          cena: cenaFormateada,
+          almuerzoInscripciones: almuerzoOrdenado,
+          cenaInscripciones: cenaOrdenada,
+        });
+        setMostrandoAnotadosHoy(true);
+        setShowHoy(false);
+        return;
+      }
+
       console.log('Obteniendo datos de Google Sheets para hoy...');
       
       // Obtener datos de Google Sheets (todos los usuarios)
@@ -838,20 +892,20 @@ function App() {
       console.log('🔄 Obteniendo datos existentes de Google Sheets...');
       // Obtener datos existentes de Google Sheets para comparar
       let datosExistentes = {};
-      const config = googleSheetsService.isConfigured();
-      console.log(`🔍 DEBUG - Google Sheets configurado para lectura:`, config);
+      const config = dataService.isConfigured();
+      console.log(`🔍 DEBUG - Backend de datos:`, config);
       if (config.read) {
         try {
-          datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
+          datosExistentes = await dataService.getUserInscripciones(iniciales, dias);
           console.log('✅ Datos existentes obtenidos:', datosExistentes);
         } catch (error) {
-          console.warn('⚠️ No se pudieron obtener datos existentes de Google Sheets:', error);
+          console.warn('⚠️ No se pudieron obtener datos existentes:', error);
         }
       } else {
-        console.log('ℹ️ Google Sheets no está configurado, solo guardando localmente');
+        console.log('ℹ️ Backend no configurado, solo guardando localmente');
       }
       
-      const configWrite = googleSheetsService.isConfigured().write;
+      const configWrite = dataService.isConfigured().write;
       const inscripcionesToSync = [];
 
       console.log('🔄 Procesando días y comidas...');
@@ -884,8 +938,8 @@ function App() {
             
             if (configWrite && haCambiado) {
               inscripcionesToSync.push(inscripcion);
-            } else if (googleSheetsService.isConfigured().write && !haCambiado) {
-              console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
+            } else if (configWrite && !haCambiado) {
+              console.log(`✅ ${dia} ${comida} ya está sincronizado (valor: "${opcion}")`);
             }
           } else {
             console.log(`⏭️ ${dia} ${comida} - Sin valor, saltando...`);
@@ -893,20 +947,20 @@ function App() {
         }
       }
 
-      // Una sola llamada en lote a la planilla (menos delay y menos fallos)
+      // Una sola llamada en lote (Neon o planilla)
       if (inscripcionesToSync.length > 0) {
         try {
-          console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios en Google Sheets (lote)...`);
-          const result = await googleSheetsService.saveInscripcionesBatch(inscripcionesToSync);
+          console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios (lote)...`);
+          const result = await dataService.saveInscripcionesBatch(inscripcionesToSync);
           if (result.errors && result.errors.length > 0) {
             errores.push(...result.errors);
           }
           if (result.success && result.count > 0) {
             setDatosOriginales(seleccion);
-            console.log(`✅ Sincronizado en planilla: ${result.count} celdas`);
+            console.log(`✅ Sincronizado: ${result.count} celdas`);
           }
         } catch (error) {
-          console.error('❌ Error sincronizando lote en Google Sheets:', error);
+          console.error('❌ Error sincronizando lote:', error);
           errores.push(`Planilla: ${error.message}`);
         }
       }
@@ -1146,15 +1200,15 @@ function App() {
           try {
             // Obtener datos existentes de Google Sheets para comparar
             let datosExistentes = {};
-            if (googleSheetsService.isConfigured()) {
+            if (dataService.isConfigured().read) {
               try {
-                datosExistentes = await googleSheetsService.getUserInscripciones(iniciales, dias);
+                datosExistentes = await dataService.getUserInscripciones(iniciales, dias);
               } catch (error) {
-                console.warn('No se pudieron obtener datos existentes de Google Sheets:', error);
+                console.warn('No se pudieron obtener datos existentes:', error);
               }
             }
             
-            const configWrite = googleSheetsService.isConfigured().write;
+            const configWrite = dataService.isConfigured().write;
             const inscripcionesToSync = [];
             for (const dia of dias) {
               for (const comida of ['Almuerzo', 'Cena']) {
@@ -1179,22 +1233,22 @@ function App() {
                   }
                   if (configWrite && haCambiado) {
                     inscripcionesToSync.push(inscripcion);
-                  } else if (googleSheetsService.isConfigured().write && !haCambiado) {
-                    console.log(`✅ ${dia} ${comida} ya está sincronizado con Google Sheets (valor: "${opcion}")`);
+                  } else if (configWrite && !haCambiado) {
+                    console.log(`✅ ${dia} ${comida} ya está sincronizado (valor: "${opcion}")`);
                   }
                 }
               }
             }
             if (inscripcionesToSync.length > 0) {
               try {
-                console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios en Google Sheets (lote)...`);
-                const result = await googleSheetsService.saveInscripcionesBatch(inscripcionesToSync);
+                console.log(`🔄 Sincronizando ${inscripcionesToSync.length} cambios (lote)...`);
+                const result = await dataService.saveInscripcionesBatch(inscripcionesToSync);
                 if (result.errors && result.errors.length > 0) errores.push(...result.errors);
                 if (result.success && result.count > 0) {
-                  console.log(`✅ Sincronizado en planilla: ${result.count} celdas`);
+                  console.log(`✅ Sincronizado: ${result.count} celdas`);
                 }
               } catch (error) {
-                console.error('❌ Error sincronizando lote en Google Sheets:', error);
+                console.error('❌ Error sincronizando lote:', error);
                 errores.push(`Planilla: ${error.message}`);
               }
             }
@@ -1265,8 +1319,8 @@ function App() {
     setShowMisaModal(true);
     setActualizandoMisa(true);
     try {
-      if (googleSheetsService.isConfigured()) {
-        const data = await googleSheetsService.getMisaInscripciones(dias);
+      if (dataService.isConfigured().read) {
+        const data = await dataService.getMisaInscripciones(dias);
         setMisaSeleccion(data);
       } else {
         setMisaSeleccion({});
@@ -1282,13 +1336,13 @@ function App() {
   const handleMisaChange = useCallback(async (dia, valor) => {
     const nuevo = misaSeleccion[dia] === valor ? '' : valor;
     setMisaSeleccion(prev => ({ ...prev, [dia]: nuevo }));
-    if (googleSheetsService.isConfigured()) {
+    if (dataService.isConfigured().write) {
       setActualizandoMisa(true);
       try {
-        await googleSheetsService.saveMisaInscripcion(dia, nuevo);
+        await dataService.saveMisaInscripcion(dia, nuevo);
         await cargarMisaProximos7();
       } catch (e) {
-        mostrarMensaje('Error al guardar Misa en la planilla', 'error');
+        mostrarMensaje('Error al guardar Misa', 'error');
       } finally {
         setActualizandoMisa(false);
       }
@@ -2478,13 +2532,13 @@ function App() {
         </div> */}
         
         {/* Estado de sincronización (solo mostrar si hay problemas) */}
-        {!googleSheetsService.isConfigured() && (
+        {!dataService.isConfigured().read && (
           <div className="notification warning" style={{ 
             position: 'static',
             marginBottom: '12px',
             fontSize: '14px'
           }}>
-            ⚠️ Google Sheets no configurado. Los datos se guardan localmente.
+            ⚠️ Backend no configurado. Los datos se guardan localmente.
           </div>
         )}
         
@@ -2771,6 +2825,38 @@ function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {dataService.usesNeon() && (
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    try {
+                      mostrarMensaje('Importando planilla → Neon...', 'info');
+                      const r = await neonApiService.importFromSheets();
+                      mostrarMensaje(`Importados ${r.imported || 0} registros a Neon`, 'success');
+                    } catch (e) {
+                      mostrarMensaje('Error importando: ' + e.message, 'error');
+                    }
+                  }}
+                >
+                  ⬇️ Importar planilla a Neon
+                </button>
+              )}
+              {dataService.usesNeon() && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={async () => {
+                    try {
+                      mostrarMensaje('Sincronizando Neon → planilla...', 'info');
+                      const r = await neonApiService.triggerSync();
+                      mostrarMensaje(`Sync OK: ${r.synced || 0} celdas`, 'success');
+                    } catch (e) {
+                      mostrarMensaje('Error sync: ' + e.message, 'error');
+                    }
+                  }}
+                >
+                  ⬆️ Sync Neon → planilla
+                </button>
+              )}
               <button
                 className="btn btn-warning"
                 onClick={() => { setShowDataManager(true); setShowConfig(false); }}
@@ -3043,7 +3129,7 @@ function App() {
         onClose={() => setShowSyncDebugger(false)}
         syncStatus={syncStatus}
         syncErrors={syncErrors}
-        useGoogleSheets={googleSheetsService.isConfigured()}
+        useGoogleSheets={dataService.isConfigured().read}
         iniciales={iniciales}
         seleccion={seleccion}
       />

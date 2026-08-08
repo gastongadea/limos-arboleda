@@ -82,4 +82,7 @@
 ## Resumen
 
 - **Corto plazo**: Usar la **Opción A** (guardado en lote ya implementado). Reduce delay y fallos sin cambiar infraestructura.
-- **Si más adelante necesitás** respuesta instantánea y tolerancia a fallos de Sheets: plantear la **Opción B** (backend + BD + job de sincronización).
+- **Opción B (implementada)**: Neon + API Vercel. Guía: [`docs/NEON_SETUP.md`](./NEON_SETUP.md).
+  - Con `REACT_APP_API_URL` la app lee/escribe en Neon.
+  - Sin esa variable, sigue el camino Google Sheets (Opción A).
+  - Sync a planilla: `POST /api/sync-sheets` o cron cada 2 minutos.

@@ -27,6 +27,9 @@ class MetaConfig {
         case 'google-apps-script-url':
           config.REACT_APP_GOOGLE_APPS_SCRIPT_URL = value;
           break;
+        case 'api-url':
+          config.REACT_APP_API_URL = value;
+          break;
         case 'app-name':
           config.REACT_APP_APP_NAME = value;
           break;

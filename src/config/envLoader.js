@@ -17,6 +17,7 @@ try {
     REACT_APP_GOOGLE_APPS_SCRIPT_URL: process.env.REACT_APP_GOOGLE_APPS_SCRIPT_URL,
     REACT_APP_GOOGLE_SERVICE_ACCOUNT_EMAIL: process.env.REACT_APP_GOOGLE_SERVICE_ACCOUNT_EMAIL,
     REACT_APP_GOOGLE_PRIVATE_KEY: process.env.REACT_APP_GOOGLE_PRIVATE_KEY,
+    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
     REACT_APP_APP_NAME: process.env.REACT_APP_APP_NAME,
     REACT_APP_VERSION: process.env.REACT_APP_VERSION,
     NODE_ENV: process.env.NODE_ENV,
@@ -37,6 +38,10 @@ if (!envVars.REACT_APP_GOOGLE_API_KEY && typeof window !== 'undefined') {
     }
     if (sheetIdMeta) {
       envVars.REACT_APP_GOOGLE_SHEET_ID = sheetIdMeta.getAttribute('content');
+    }
+    const apiUrlMeta = document.querySelector('meta[name="api-url"]');
+    if (apiUrlMeta) {
+      envVars.REACT_APP_API_URL = apiUrlMeta.getAttribute('content');
     }
   } catch (error) {
     console.warn('Error leyendo meta tags:', error);

@@ -44,10 +44,12 @@ function updateMetaTags() {
     const apiKey = envVars.REACT_APP_GOOGLE_API_KEY;
     const sheetId = envVars.REACT_APP_GOOGLE_SHEET_ID;
     const appsScriptUrl = envVars.REACT_APP_GOOGLE_APPS_SCRIPT_URL;
+    const apiUrl = envVars.REACT_APP_API_URL;
     
     console.log('🔑 API Key:', apiKey ? '✅ Configurada' : '❌ No configurada');
     console.log('📊 Sheet ID:', sheetId ? '✅ Configurada' : '❌ No configurada');
     console.log('🔗 Apps Script URL:', appsScriptUrl ? '✅ Configurada' : '❌ No configurada');
+    console.log('🌐 API URL (Neon):', apiUrl ? '✅ Configurada' : '❌ No configurada');
     
     // Leer el archivo index.html
     let html = fs.readFileSync(indexPath, 'utf8');
@@ -72,6 +74,20 @@ function updateMetaTags() {
         /<meta name="google-apps-script-url" content="[^"]*" \/>/,
         `<meta name="google-apps-script-url" content="${appsScriptUrl}" />`
       );
+    }
+
+    if (apiUrl !== undefined) {
+      if (/<meta name="api-url"/.test(html)) {
+        html = html.replace(
+          /<meta name="api-url" content="[^"]*" \/>/,
+          `<meta name="api-url" content="${apiUrl || ''}" />`
+        );
+      } else {
+        html = html.replace(
+          /(<meta name="google-apps-script-url"[^/]*\/>)/,
+          `$1\n    <meta name="api-url" content="${apiUrl || ''}" />`
+        );
+      }
     }
     
     // Escribir el archivo actualizado
