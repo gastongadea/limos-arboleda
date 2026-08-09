@@ -84,9 +84,10 @@ module.exports = async function handler(req, res) {
   setCors(res, req);
   if (req.method === 'OPTIONS') return handleOptions(req, res);
 
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, OPTIONS');
-    return res.status(405).json({ success: false, error: 'Usar POST' });
+  // GET: cron de Vercel; POST: botón / PowerShell
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
+    return res.status(405).json({ success: false, error: 'Usar GET o POST' });
   }
 
   try {
@@ -157,6 +158,9 @@ module.exports = async function handler(req, res) {
       imported,
       misa: misaImported,
       sheetRows: sheetData.length - 1,
+      conflictPolicy: 'sheet_wins',
+      message:
+        'Import OK: en conflicto gana la planilla (sobrescribe Neon).',
     });
   } catch (error) {
     console.error('import-from-sheets error:', error);

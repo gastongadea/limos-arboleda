@@ -207,7 +207,8 @@ o el botón **Sync Neon → planilla** en Configuración.
 | App sigue lenta / Sheets | Falta `REACT_APP_API_URL` o meta `api-url` |
 | Sync falla “fila no encontrada” | Falta la fecha A/C en la hoja Data; el sync no crea filas nuevas aún |
 | CORS en el navegador | Agregá `CORS_ORIGINS=https://gastongadea.github.io` en Vercel |
-| Error de cron `*/2 * * * *` en Hobby | El plan gratis solo permite **1 cron por día**. Ya está en `0 9 * * *`. El sync al guardar y el botón manual cubren el día a día |
+| Error de cron `*/2 * * * *` en Hobby | Solo se permiten crons **1 vez por día**. Hay 2 crons diarios: import planilla→Neon (`0 10`) y sync Neon→planilla (`0 9`) |
+| Edición manual en la planilla | El import diario (10:00 UTC ≈ 07:00 Argentina) trae esos cambios a Neon; **en conflicto gana la planilla** |
 | `NetworkError when attempting to fetch` en local | CORS: la API ahora permite `localhost`. Redeploy Vercel tras actualizar `api/_lib/cors.js` |
 | Pantalla en blanco en `*.vercel.app` | Ese dominio es **solo la API**. La app se abre en GitHub Pages, no en Vercel |
 
