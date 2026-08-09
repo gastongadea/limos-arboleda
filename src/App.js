@@ -48,7 +48,7 @@ const CONFIG = {
   DIAS_VISTA: 60,
   DIAS_RESUMEN: 7,
   MAX_INTENTOS_SYNC: 3,
-  TIMEOUT_SYNC: 10000, // 10 segundos
+  TIMEOUT_SYNC: 45000, // 45s (Neon es rápido; Sheets/fallback puede tardar más)
 };
 
 const COMENSALES_OCULTOS_KEY = 'limos_comensales_ocultos';
@@ -292,12 +292,17 @@ function App() {
         let nuevaSel = {};
         
         if (dataService.isConfigured().read) {
+          setSyncStatus(dataService.usesNeon() ? 'Cargando (Neon)...' : 'Cargando...');
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Timeout al cargar datos')), CONFIG.TIMEOUT_SYNC)
           );
           const dataPromise = dataService.getUserInscripciones(iniciales, dias);
           nuevaSel = await Promise.race([dataPromise, timeoutPromise]);
           setSyncStatus('');
+          const diasConDatos = Object.values(nuevaSel || {}).filter(
+            (d) => d && (d.Almuerzo || d.Cena)
+          ).length;
+          console.log(`✅ loadUserData: ${diasConDatos} días con datos (backend=${dataService.isConfigured().backend})`);
         } else {
           // Cargar desde localStorage
           dias.forEach(dia => {
