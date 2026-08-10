@@ -51,26 +51,54 @@ const CONFIG = {
   TIMEOUT_SYNC: 45000, // 45s (Neon es rápido; Sheets/fallback puede tardar más)
 };
 
-const COMENSALES_OCULTOS_KEY = 'limos_comensales_ocultos';
+const COMENSALES_ESTADO_KEY = 'limos_comensales_estado';
+const COMENSALES_OCULTOS_KEY = 'limos_comensales_ocultos'; // legacy
 
-function cargarComensalesOcultos() {
+/** @typedef {'activo' | 'inactivo' | 'oculto'} ComensalEstado */
+
+function cargarComensalesEstado() {
   try {
-    const raw = localStorage.getItem(COMENSALES_OCULTOS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const raw = localStorage.getItem(COMENSALES_ESTADO_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    // Migrar lista antigua de ocultos → mapa de estados
+    const legacy = localStorage.getItem(COMENSALES_OCULTOS_KEY);
+    if (legacy) {
+      const ocultos = JSON.parse(legacy);
+      if (Array.isArray(ocultos)) {
+        const mapa = {};
+        ocultos.forEach((ini) => {
+          mapa[ini] = 'oculto';
+        });
+        localStorage.setItem(COMENSALES_ESTADO_KEY, JSON.stringify(mapa));
+        return mapa;
+      }
+    }
+    return {};
   } catch (e) {
-    console.warn('No se pudieron cargar comensales ocultos:', e);
-    return [];
+    console.warn('No se pudo cargar estado de comensales:', e);
+    return {};
   }
 }
 
-function guardarComensalesOcultos(ocultos) {
+function guardarComensalesEstado(estadoMap) {
   try {
-    localStorage.setItem(COMENSALES_OCULTOS_KEY, JSON.stringify(ocultos));
+    localStorage.setItem(COMENSALES_ESTADO_KEY, JSON.stringify(estadoMap));
   } catch (e) {
-    console.warn('No se pudieron guardar comensales ocultos:', e);
+    console.warn('No se pudo guardar estado de comensales:', e);
   }
+}
+
+function getComensalEstado(estadoMap, ini) {
+  return estadoMap[ini] || 'activo';
+}
+
+function comidaAnotada(opcion) {
+  return opcion != null && String(opcion).trim() !== '';
 }
 
 // Utilidades
@@ -167,34 +195,42 @@ function App() {
   // Estado para usuarios dinámicos desde Google Sheets
   const [usuariosDinamicos, setUsuariosDinamicos] = useState([]);
 
-  // Comensales ocultos en pantalla principal (persistido en localStorage)
-  const [comensalesOcultos, setComensalesOcultos] = useState(() => cargarComensalesOcultos());
+  // Estado de comensales: activo | inactivo | oculto (persistido en localStorage)
+  const [comensalesEstado, setComensalesEstado] = useState(() => cargarComensalesEstado());
 
   const listaComensales = usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista;
 
-  const toggleComensalVisible = useCallback((ini) => {
-    setComensalesOcultos((prev) => {
-      const next = prev.includes(ini)
-        ? prev.filter((x) => x !== ini)
-        : [...prev, ini];
-      guardarComensalesOcultos(next);
+  const setComensalEstado = useCallback((ini, estado) => {
+    setComensalesEstado((prev) => {
+      const next = { ...prev };
+      if (estado === 'activo') {
+        delete next[ini];
+      } else {
+        next[ini] = estado;
+      }
+      guardarComensalesEstado(next);
       return next;
     });
   }, []);
 
   // Si el usuario seleccionado queda oculto, deseleccionarlo
   useEffect(() => {
-    if (iniciales && comensalesOcultos.includes(iniciales)) {
+    if (iniciales && getComensalEstado(comensalesEstado, iniciales) === 'oculto') {
       setIniciales('');
       setSeleccion({});
       setTieneCambios(false);
     }
-  }, [comensalesOcultos, iniciales]);
+  }, [comensalesEstado, iniciales]);
 
-  const setTodosComensalesVisibles = useCallback((visibles) => {
-    const next = visibles ? [] : [...listaComensales];
-    setComensalesOcultos(next);
-    guardarComensalesOcultos(next);
+  const setTodosComensalesEstado = useCallback((estado) => {
+    const next = {};
+    if (estado !== 'activo') {
+      listaComensales.forEach((ini) => {
+        next[ini] = estado;
+      });
+    }
+    setComensalesEstado(next);
+    guardarComensalesEstado(next);
   }, [listaComensales]);
 
   // Generar días (próximos 60 días desde hoy)
@@ -451,80 +487,94 @@ function App() {
     }
   }, [dias, mostrarMensaje]);
 
-  // Función para detectar usuarios sin comidas hoy
+  // Detectar comensales activos con 0 o 1 comida anotada hoy (para el "!")
   const detectarUsuariosSinComidasHoy = useCallback(async () => {
     try {
-      // Calcular fecha de hoy en horario local (evitar problemas con UTC)
       const hoyDate = new Date();
-      const hoy = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`; // YYYY-MM-DD
-      
-      // Obtener datos de localStorage
-      const inscripciones = localStorageService.getInscripciones();
-      const inscripcionesHoy = inscripciones.filter(item => item.fecha === hoy);
-      
-      // Obtener todos los usuarios que han cargado comidas hoy (desde localStorage)
-      const usuariosConComidas = new Set();
-      inscripcionesHoy.forEach(inscripcion => {
-        // Un usuario "ha cargado comidas" si tiene AL MENOS UNA inscripción válida
-        if (inscripcion.opcion && inscripcion.opcion !== 'No') {
-          usuariosConComidas.add(inscripcion.iniciales);
+      const hoy = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-${String(hoyDate.getDate()).padStart(2, '0')}`;
+
+      /** @type {Map<string, { almuerzo: boolean, cena: boolean }>} */
+      const porUsuario = new Map();
+
+      const marcar = (usuario, comida, opcion) => {
+        if (!usuario || !comidaAnotada(opcion)) return;
+        if (!porUsuario.has(usuario)) {
+          porUsuario.set(usuario, { almuerzo: false, cena: false });
         }
-      });
-      
-      // Si Google Sheets está configurado, también obtener datos de ahí
-      if (googleSheetsService.isConfigured()) {
+        const info = porUsuario.get(usuario);
+        if (comida === 'Almuerzo' || comida === 'A' || comida === 'a') info.almuerzo = true;
+        if (comida === 'Cena' || comida === 'C' || comida === 'c') info.cena = true;
+      };
+
+      // 1) Neon (preferido)
+      if (dataService.usesNeon()) {
         try {
-          // Obtener datos de Google Sheets para hoy
+          const rows = await neonApiService.getInscripcionesByDate(hoy);
+          rows.forEach((row) => marcar(row.iniciales, row.comida, row.opcion));
+        } catch (e) {
+          console.warn('Neon: error detectando comidas de hoy:', e);
+        }
+      }
+
+      // 2) localStorage
+      const inscripciones = localStorageService.getInscripciones();
+      inscripciones
+        .filter((item) => item.fecha === hoy)
+        .forEach((inscripcion) => {
+          marcar(inscripcion.iniciales, inscripcion.comida, inscripcion.opcion);
+        });
+
+      // 3) Sheets (complemento)
+      if (googleSheetsService.isConfigured().read) {
+        try {
           const sheetData = await googleSheetsService.getSheetData();
-          const hoyFormatted = `${new Date().getDate()}/${new Date().getMonth() + 1}/${new Date().getFullYear().toString().slice(-2)}`;
-          
-          // Buscar filas de hoy en Google Sheets
           for (let row = 1; row < sheetData.length; row++) {
             const rowData = sheetData[row];
             if (!rowData || rowData.length < 3) continue;
-            
-            const fechaCell = rowData[1]; // Columna B: Fecha
-            if (fechaCell && fechaCell.toString().trim() === hoyFormatted) {
-              // Esta fila es de hoy, revisar todas las columnas de usuarios
-              for (let col = 3; col < rowData.length; col++) {
-                const valor = rowData[col];
-                if (valor && valor.toString().trim() !== '' && valor.toString().trim() !== 'No') {
-                  // Obtener el nombre del usuario de la columna correspondiente
-                  const headerRow = sheetData[0];
-                  if (headerRow && headerRow[col]) {
-                    const usuario = headerRow[col].toString().trim();
-                    usuariosConComidas.add(usuario);
-                  }
-                }
-              }
+            const fechaISO = googleSheetsService.parseDate(rowData[1]);
+            if (fechaISO !== hoy) continue;
+            const tipo = String(rowData[2] || '').trim().toUpperCase();
+            const comida = tipo === 'A' ? 'Almuerzo' : tipo === 'C' ? 'Cena' : '';
+            if (!comida) continue;
+            const headerRow = sheetData[0] || [];
+            for (let col = 3; col < rowData.length; col++) {
+              const usuario = headerRow[col] ? String(headerRow[col]).trim() : '';
+              if (!usuario || usuario.toLowerCase() === 'misa') continue;
+              marcar(usuario, comida, rowData[col]);
             }
           }
         } catch (error) {
-          console.error('Error al obtener datos de Google Sheets para detectar usuarios sin comidas:', error);
+          console.error('Error al obtener datos de Sheets para detectar comidas:', error);
         }
       }
-      
-      // Usar la lista dinámica de usuarios, con fallback a la estática
+
       const listaUsuarios = usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista;
-      
-      // Filtrar usuarios que NO han cargado comidas hoy
-      const usuariosSinComidas = listaUsuarios.filter(ini => {
-        const tieneComidas = usuariosConComidas.has(ini);
+
+      const incompletos = listaUsuarios.filter((ini) => {
         const iniLower = ini.trim().toLowerCase();
-        const esEspecial = iniLower.includes('huesped') || 
-                          iniLower.includes('invitad') ||
-                          iniLower.includes('plan') ||
-                          iniLower === 'misa' ||
-                          ini.trim() === '';
-        
-        return !tieneComidas && !esEspecial;
+        const esEspecial =
+          iniLower.includes('huesped') ||
+          iniLower.includes('invitad') ||
+          iniLower.includes('plan') ||
+          iniLower === 'misa' ||
+          ini.trim() === '';
+        if (esEspecial) return false;
+
+        // Inactivos: no muestran el "!" aunque no estén anotados
+        if (getComensalEstado(comensalesEstado, ini) === 'inactivo') return false;
+        if (getComensalEstado(comensalesEstado, ini) === 'oculto') return false;
+
+        const info = porUsuario.get(ini) || { almuerzo: false, cena: false };
+        const comidasMarcadas = (info.almuerzo ? 1 : 0) + (info.cena ? 1 : 0);
+        // Activo con 0 o solo 1 comida → advertencia
+        return comidasMarcadas < 2;
       });
-      
-      setUsuariosSinComidasHoy(usuariosSinComidas);
+
+      setUsuariosSinComidasHoy(incompletos);
     } catch (error) {
       console.error('Error al detectar usuarios sin comidas:', error);
     }
-  }, [usuariosDinamicos]);
+  }, [usuariosDinamicos, comensalesEstado]);
 
   // Detectar usuarios sin comidas al cargar la aplicación
   useEffect(() => {
@@ -2157,9 +2207,11 @@ function App() {
           marginBottom: 12
         }}>
           {(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista)
-            .filter((ini) => !comensalesOcultos.includes(ini))
+            .filter((ini) => getComensalEstado(comensalesEstado, ini) !== 'oculto')
             .map(ini => {
-            const sinComidasHoy = usuariosSinComidasHoy.includes(ini);
+            const estadoComensal = getComensalEstado(comensalesEstado, ini);
+            const esInactivo = estadoComensal === 'inactivo';
+            const sinComidasHoy = !esInactivo && usuariosSinComidasHoy.includes(ini);
             const esSeleccionado = ini === iniciales;
             const mostrarBoton = !iniciales && !mostrandoAnotadosHoy; // Solo mostrar si no hay selección de iniciales y no se está mostrando la vista Hoy
             const esMisa = ini === 'Misa';
@@ -2202,6 +2254,13 @@ function App() {
               );
             }
 
+            const bgNormal = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
+            const bgHover = esInactivo
+              ? 'linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%)'
+              : 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+            const borderNormal = esInactivo ? '2px solid #cfcfcf' : '2px solid #e8d5c4';
+            const colorNormal = '#2c1810';
+
             return (
               <button
                 key={ini}
@@ -2211,25 +2270,33 @@ function App() {
                   fontSize: '13px',
                   padding: '8px 12px',
                   borderRadius: '8px',
-                  border: esSeleccionado ? '2px solid #1976d2' : '2px solid #e8d5c4',
+                  border: esSeleccionado ? '2px solid #1976d2' : borderNormal,
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
                   background: esSeleccionado 
                     ? 'linear-gradient(135deg, #1976d2 0%, #2196f3 100%)'
-                    : 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)',
-                  color: esSeleccionado ? 'white' : '#2c1810',
+                    : bgNormal,
+                  color: esSeleccionado ? 'white' : colorNormal,
                   boxShadow: esSeleccionado ? '0 4px 16px rgba(25, 118, 210, 0.2)' : 'none',
                   transform: esSeleccionado ? 'translateY(-1px)' : 'none',
                   fontWeight: esSeleccionado ? 'bold' : 'normal',
                 }}
                 onClick={() => handleCambioIniciales(ini)}
-                title={sinComidasHoy ? 'No ha cargado comidas hoy' : ''}
+                title={
+                  esInactivo
+                    ? `${ini} (inactivo)`
+                    : sinComidasHoy
+                      ? 'Falta anotar almuerzo y/o cena de hoy'
+                      : ''
+                }
                 onMouseEnter={(e) => {
                   if (!esSeleccionado) {
-                    e.target.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
-                    e.target.style.borderColor = '#1976d2';
+                    e.target.style.background = bgHover;
+                    e.target.style.borderColor = esInactivo ? '#bdbdbd' : '#1976d2';
                     e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 4px 16px rgba(25, 118, 210, 0.2)';
+                    e.target.style.boxShadow = esInactivo
+                      ? '0 2px 8px rgba(0,0,0,0.08)'
+                      : '0 4px 16px rgba(25, 118, 210, 0.2)';
                   } else {
                     e.target.style.background = 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)';
                     e.target.style.transform = 'translateY(-3px)';
@@ -2238,8 +2305,9 @@ function App() {
                 }}
                 onMouseLeave={(e) => {
                   if (!esSeleccionado) {
-                    e.target.style.background = 'linear-gradient(135deg, #fff 0%, #f8f9fa 100%)';
-                    e.target.style.borderColor = '#e8d5c4';
+                    e.target.style.background = bgNormal;
+                    e.target.style.borderColor = esInactivo ? '#cfcfcf' : '#e8d5c4';
+                    e.target.style.color = colorNormal;
                     e.target.style.transform = 'none';
                     e.target.style.boxShadow = 'none';
                   } else {
@@ -2770,63 +2838,88 @@ function App() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
                 <strong style={{ color: 'var(--primary-color)', fontSize: 15 }}>
-                  Mostrar / ocultar comensales
+                  Estado de comensales
                 </strong>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="btn btn-outline"
                     style={{ padding: '4px 10px', fontSize: 12 }}
-                    onClick={() => setTodosComensalesVisibles(true)}
+                    onClick={() => setTodosComensalesEstado('activo')}
                   >
-                    Todos
+                    Todos activos
                   </button>
                   <button
                     type="button"
                     className="btn btn-outline"
                     style={{ padding: '4px 10px', fontSize: 12 }}
-                    onClick={() => setTodosComensalesVisibles(false)}
+                    onClick={() => setTodosComensalesEstado('inactivo')}
                   >
-                    Ninguno
+                    Todos inactivos
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '4px 10px', fontSize: 12 }}
+                    onClick={() => setTodosComensalesEstado('oculto')}
+                  >
+                    Todos ocultos
                   </button>
                 </div>
               </div>
               <p style={{ margin: '0 0 12px 0', fontSize: 13, color: 'var(--text-secondary)' }}>
-                Destildá para ocultar el botón de iniciales en la pantalla principal.
+                <strong>Activo:</strong> visible con aviso (!) si falta almuerzo o cena hoy.
+                {' '}<strong>Inactivo:</strong> visible atenuado, sin aviso.
+                {' '}<strong>Oculto:</strong> no aparece en la pantalla principal.
               </p>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
                 gap: 8,
-                maxHeight: 220,
+                maxHeight: 280,
                 overflowY: 'auto',
               }}>
                 {listaComensales.map((ini) => {
-                  const visible = !comensalesOcultos.includes(ini);
+                  const estado = getComensalEstado(comensalesEstado, ini);
+                  const estilos = {
+                    activo: { border: '1px solid #bbdefb', background: '#e3f2fd', color: '#1565c0' },
+                    inactivo: { border: '1px solid #e0e0e0', background: '#f0f0f0', color: '#757575' },
+                    oculto: { border: '1px solid #eee', background: '#fafafa', color: '#9e9e9e' },
+                  }[estado];
                   return (
-                    <label
+                    <div
                       key={ini}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
+                        justifyContent: 'space-between',
                         gap: 8,
                         padding: '6px 8px',
                         borderRadius: 6,
-                        border: visible ? '1px solid #bbdefb' : '1px solid #eee',
-                        background: visible ? '#e3f2fd' : '#f5f5f5',
-                        cursor: 'pointer',
+                        ...estilos,
                         fontSize: 13,
-                        fontWeight: visible ? 600 : 400,
-                        color: visible ? '#1565c0' : '#888',
+                        fontWeight: estado === 'activo' ? 600 : 400,
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={visible}
-                        onChange={() => toggleComensalVisible(ini)}
-                      />
-                      {ini}
-                    </label>
+                      <span>{ini}</span>
+                      <select
+                        value={estado}
+                        onChange={(e) => setComensalEstado(ini, e.target.value)}
+                        style={{
+                          fontSize: 12,
+                          padding: '2px 4px',
+                          borderRadius: 4,
+                          border: '1px solid #ccc',
+                          background: '#fff',
+                          color: '#333',
+                          maxWidth: 90,
+                        }}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                        <option value="oculto">Oculto</option>
+                      </select>
+                    </div>
                   );
                 })}
               </div>
