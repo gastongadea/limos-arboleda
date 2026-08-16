@@ -63,11 +63,21 @@ function formatearDuracionSum(fechaInicio, horaInicio, fechaFin, horaFin) {
     (Date.UTC(y2, m2 - 1, d2, h2, min2) - Date.UTC(y1, m1 - 1, d1, h1, min1)) / 60000
   );
   if (totalMin <= 0) return '—';
+
+  const dias = Math.floor(totalMin / (60 * 24));
+  const restoMin = totalMin % (60 * 24);
+  const horas = Math.floor(restoMin / 60);
+  const mins = restoMin % 60;
+
+  if (dias > 0) {
+    const partes = [`${dias} d`];
+    if (horas > 0) partes.push(`${horas} h`);
+    if (mins > 0) partes.push(`${mins} min`);
+    return partes.join(', ');
+  }
   if (totalMin < 60) return `${totalMin} min`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (m === 0) return h === 1 ? '1 h' : `${h} h`;
-  return `${h} h ${m} min`;
+  if (mins === 0) return `${horas} h`;
+  return `${horas} h ${mins} min`;
 }
 
 /** Botón "7+" junto a R: copia últimos 7 días con comidas a los 7 siguientes (`handleRepetirSemana`). Poné `true` para volver a mostrarlo. */
@@ -2573,44 +2583,59 @@ function App() {
         {!iniciales && !mostrandoAnotadosHoy && reservasSum.length > 0 && (
           <div style={{
             marginTop: '12px',
-            padding: '12px 16px',
+            padding: '8px 10px',
             background: 'linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)',
             border: '2px solid #00695c',
             borderRadius: '8px',
             boxShadow: '0 2px 8px rgba(0, 105, 92, 0.15)',
-            overflowX: 'auto',
           }}>
-            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#004d40', marginBottom: 8 }}>
-              Próximas reservas del SUM
+            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#004d40', marginBottom: 6 }}>
+              Próximas reservas SUM
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#2c1810' }}>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: '11px',
+              color: '#2c1810',
+              tableLayout: 'fixed',
+            }}>
               <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '2px solid #00695c' }}>
-                  <th style={{ padding: '6px 8px' }}>Fecha</th>
-                  <th style={{ padding: '6px 8px' }}>Hora</th>
-                  <th style={{ padding: '6px 8px' }}>Duración</th>
-                  <th style={{ padding: '6px 8px' }}>Actividad</th>
-                  <th style={{ padding: '6px 8px' }}>Responsable</th>
+                <tr style={{ textAlign: 'left', borderBottom: '1px solid #00695c' }}>
+                  <th style={{ padding: '3px 2px', width: '14%' }}>Fecha</th>
+                  <th style={{ padding: '3px 2px', width: '12%' }}>Hora</th>
+                  <th style={{ padding: '3px 2px', width: '18%' }}>Dur.</th>
+                  <th style={{ padding: '3px 2px', width: '28%' }}>Actividad</th>
+                  <th style={{ padding: '3px 2px', width: '28%' }}>Resp.</th>
                 </tr>
               </thead>
               <tbody>
-                {reservasSum.map((r) => {
-                  const mismaFecha = r.fecha_inicio === r.fecha_fin;
-                  const fechaLabel = mismaFecha
-                    ? formatearFecha(r.fecha_inicio, 'misa')
-                    : `${formatearFecha(r.fecha_inicio, 'misa')} – ${formatearFecha(r.fecha_fin, 'misa')}`;
-                  return (
-                    <tr key={r.id} style={{ borderBottom: '1px solid rgba(0,105,92,0.2)' }}>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{fechaLabel}</td>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{r.hora_inicio}</td>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                        {formatearDuracionSum(r.fecha_inicio, r.hora_inicio, r.fecha_fin, r.hora_fin)}
-                      </td>
-                      <td style={{ padding: '6px 8px' }}>{r.actividad}</td>
-                      <td style={{ padding: '6px 8px' }}>{r.responsable}</td>
-                    </tr>
-                  );
-                })}
+                {reservasSum.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: '1px solid rgba(0,105,92,0.2)' }}>
+                    <td style={{ padding: '3px 2px', verticalAlign: 'top' }}>
+                      {formatearFecha(r.fecha_inicio, 'misa')}
+                    </td>
+                    <td style={{ padding: '3px 2px', verticalAlign: 'top' }}>{r.hora_inicio}</td>
+                    <td style={{ padding: '3px 2px', verticalAlign: 'top' }}>
+                      {formatearDuracionSum(r.fecha_inicio, r.hora_inicio, r.fecha_fin, r.hora_fin)}
+                    </td>
+                    <td style={{
+                      padding: '3px 2px',
+                      verticalAlign: 'top',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {r.actividad}
+                    </td>
+                    <td style={{
+                      padding: '3px 2px',
+                      verticalAlign: 'top',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                    }}>
+                      {r.responsable}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
