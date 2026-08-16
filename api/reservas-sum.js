@@ -94,21 +94,39 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'GET') {
       const from = req.query?.from || new Date().toISOString().slice(0, 10);
-      const rows = await db`
-        SELECT
-          id,
-          fecha_inicio::text AS fecha_inicio,
-          fecha_fin::text AS fecha_fin,
-          hora_inicio,
-          hora_fin,
-          actividad,
-          responsable,
-          created_at
-        FROM reservas_sum
-        WHERE fecha_fin >= ${from}::date
-        ORDER BY fecha_inicio ASC, hora_inicio ASC
-        LIMIT 100
-      `;
+      const to = req.query?.to || null;
+      const rows = to
+        ? await db`
+            SELECT
+              id,
+              fecha_inicio::text AS fecha_inicio,
+              fecha_fin::text AS fecha_fin,
+              hora_inicio,
+              hora_fin,
+              actividad,
+              responsable,
+              created_at
+            FROM reservas_sum
+            WHERE fecha_fin >= ${from}::date
+              AND fecha_inicio <= ${to}::date
+            ORDER BY fecha_inicio ASC, hora_inicio ASC
+            LIMIT 200
+          `
+        : await db`
+            SELECT
+              id,
+              fecha_inicio::text AS fecha_inicio,
+              fecha_fin::text AS fecha_fin,
+              hora_inicio,
+              hora_fin,
+              actividad,
+              responsable,
+              created_at
+            FROM reservas_sum
+            WHERE fecha_fin >= ${from}::date
+            ORDER BY fecha_inicio ASC, hora_inicio ASC
+            LIMIT 100
+          `;
       return res.status(200).json({ success: true, rows });
     }
 

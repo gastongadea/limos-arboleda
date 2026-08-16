@@ -121,9 +121,11 @@ class NeonApiService {
     return this._fetch('api/import-from-sheets', { method: 'POST' });
   }
 
-  async getReservasSum(from) {
+  async getReservasSum(from, to) {
     const hoy = from || new Date().toISOString().slice(0, 10);
-    const result = await this._fetch('api/reservas-sum', { params: { from: hoy } });
+    const params = { from: hoy };
+    if (to) params.to = to;
+    const result = await this._fetch('api/reservas-sum', { params });
     return result.rows || [];
   }
 

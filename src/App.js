@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import Modal from 'react-modal';
 import localStorageService from './services/localStorageService';
@@ -111,6 +111,55 @@ function encontrarSolapeSum(candidatos, existentes, excludeId = null) {
     }
   }
   return null;
+}
+
+const MESES_SUM_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+const DIAS_SUM_CORTO = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+
+function isoFechaLocal(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function agregarDiaISO(fechaISO, dias = 1) {
+  const [y, m, d] = String(fechaISO).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + dias));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+function ultimoDiaDelMes(year, monthIndex) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Días ISO (YYYY-MM-DD) cubiertos por cada reserva (fecha_inicio..fecha_fin). */
+function setDiasReservadosSum(reservas) {
+  const set = new Set();
+  (reservas || []).forEach((r) => {
+    const ini = r.fecha_inicio;
+    const fin = r.fecha_fin || r.fecha_inicio;
+    if (!ini) return;
+    let cur = ini;
+    let guard = 0;
+    while (cur <= fin && guard < 370) {
+      set.add(cur);
+      cur = agregarDiaISO(cur, 1);
+      guard += 1;
+    }
+  });
+  return set;
+}
+
+/** Celdas del mes (lunes primero). null = vacío fuera del mes. */
+function celdasCalendarioMes(year, monthIndex) {
+  const total = ultimoDiaDelMes(year, monthIndex);
+  const dowDomingo = new Date(year, monthIndex, 1).getDay();
+  const offset = (dowDomingo + 6) % 7;
+  const celdas = Array(offset).fill(null);
+  for (let d = 1; d <= total; d++) celdas.push(d);
+  while (celdas.length % 7 !== 0) celdas.push(null);
+  return celdas;
 }
 
 /** Botón "7+" junto a R: copia últimos 7 días con comidas a los 7 siguientes (`handleRepetirSemana`). Poné `true` para volver a mostrarlo. */
@@ -268,6 +317,12 @@ function App() {
   const [reservasSum, setReservasSum] = useState([]);
   const [guardandoSum, setGuardandoSum] = useState(false);
   const [sumEditId, setSumEditId] = useState(null);
+  const [showSumCalendario, setShowSumCalendario] = useState(false);
+  const [sumCalVista, setSumCalVista] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [reservasSumCal, setReservasSumCal] = useState([]);
   const [sumForm, setSumForm] = useState(() => {
     const hoy = hoyISOLocal();
     return {
@@ -1511,12 +1566,37 @@ function App() {
     }
   }, []);
 
+  const cargarReservasSumMes = useCallback(async (year, month) => {
+    if (!neonApiService.isConfigured()) {
+      setReservasSumCal([]);
+      return;
+    }
+    const from = isoFechaLocal(year, month, 1);
+    const to = isoFechaLocal(year, month, ultimoDiaDelMes(year, month));
+    try {
+      const rows = await neonApiService.getReservasSum(from, to);
+      setReservasSumCal(rows);
+    } catch (e) {
+      console.warn('Error cargando calendario SUM:', e);
+    }
+  }, []);
+
   useEffect(() => {
     if (!iniciales && !mostrandoAnotadosHoy) {
       cargarReservasSum();
     }
   }, [iniciales, mostrandoAnotadosHoy, cargarReservasSum]);
 
+  useEffect(() => {
+    if (showSumCalendario) {
+      cargarReservasSumMes(sumCalVista.year, sumCalVista.month);
+    }
+  }, [showSumCalendario, sumCalVista.year, sumCalVista.month, cargarReservasSumMes]);
+
+  const diasPintadosSum = useMemo(
+    () => setDiasReservadosSum(reservasSumCal),
+    [reservasSumCal]
+  );
   const handleOpenSumModal = useCallback(() => {
     const hoy = hoyISOLocal();
     setSumEditId(null);
@@ -1585,6 +1665,9 @@ function App() {
         setShowSumModal(false);
         setSumEditId(null);
         await cargarReservasSum();
+        if (showSumCalendario) {
+          await cargarReservasSumMes(sumCalVista.year, sumCalVista.month);
+        }
       } catch (err) {
         mostrarMensaje(err.message || 'Error al actualizar reserva', 'error');
       } finally {
@@ -1628,6 +1711,9 @@ function App() {
         );
         setShowSumModal(false);
         await cargarReservasSum();
+        if (showSumCalendario) {
+          await cargarReservasSumMes(sumCalVista.year, sumCalVista.month);
+        }
       }
       if (errores.length) {
         mostrarMensaje(errores.slice(0, 3).join(' · '), 'error');
@@ -1637,7 +1723,7 @@ function App() {
     } finally {
       setGuardandoSum(false);
     }
-  }, [sumForm, sumEditId, reservasSum, mostrarMensaje, cargarReservasSum]);
+  }, [sumForm, sumEditId, reservasSum, showSumCalendario, sumCalVista, mostrarMensaje, cargarReservasSum, cargarReservasSumMes]);
 
   const handleEliminarSum = useCallback(async () => {
     if (!sumEditId) return;
@@ -1653,12 +1739,15 @@ function App() {
       setShowSumModal(false);
       setSumEditId(null);
       await cargarReservasSum();
+      if (showSumCalendario) {
+        await cargarReservasSumMes(sumCalVista.year, sumCalVista.month);
+      }
     } catch (err) {
       mostrarMensaje(err.message || 'Error al eliminar reserva', 'error');
     } finally {
       setGuardandoSum(false);
     }
-  }, [sumEditId, mostrarMensaje, cargarReservasSum]);
+  }, [sumEditId, showSumCalendario, sumCalVista, mostrarMensaje, cargarReservasSum, cargarReservasSumMes]);
 
   const handleAdminSubmit = useCallback((e) => {
     e.preventDefault();
@@ -2734,9 +2823,153 @@ function App() {
             borderRadius: '8px',
             boxShadow: '0 2px 8px rgba(0, 105, 92, 0.15)',
           }}>
-            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#004d40', marginBottom: 6 }}>
-              Próximas reservas SUM
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: showSumCalendario ? 8 : 6,
+            }}>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#004d40' }}>
+                Próximas reservas SUM
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSumCalendario((v) => {
+                    if (!v) {
+                      const d = new Date();
+                      setSumCalVista({ year: d.getFullYear(), month: d.getMonth() });
+                    }
+                    return !v;
+                  });
+                }}
+                title={showSumCalendario ? 'Ocultar calendario' : 'Ver calendario de reservas'}
+                aria-label={showSumCalendario ? 'Ocultar calendario' : 'Ver calendario de reservas'}
+                aria-pressed={showSumCalendario}
+                style={{
+                  border: 'none',
+                  background: showSumCalendario ? 'rgba(0,105,92,0.15)' : 'transparent',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  padding: '2px 6px',
+                  fontSize: 16,
+                  lineHeight: 1,
+                  color: '#00695c',
+                }}
+              >
+                📅
+              </button>
             </div>
+
+            {showSumCalendario && (
+              <div style={{
+                marginBottom: 10,
+                padding: 8,
+                background: 'rgba(255,255,255,0.75)',
+                borderRadius: 8,
+                border: '1px solid rgba(0,105,92,0.35)',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                  gap: 6,
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSumCalVista((prev) => {
+                        const m = prev.month - 1;
+                        if (m < 0) return { year: prev.year - 1, month: 11 };
+                        return { year: prev.year, month: m };
+                      });
+                    }}
+                    aria-label="Mes anterior"
+                    style={{
+                      border: '1px solid #00695c',
+                      background: '#fff',
+                      color: '#00695c',
+                      borderRadius: 6,
+                      width: 28,
+                      height: 28,
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    ‹
+                  </button>
+                  <div style={{ fontSize: 13, fontWeight: 'bold', color: '#004d40', textAlign: 'center' }}>
+                    {MESES_SUM_ES[sumCalVista.month]} {sumCalVista.year}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSumCalVista((prev) => {
+                        const m = prev.month + 1;
+                        if (m > 11) return { year: prev.year + 1, month: 0 };
+                        return { year: prev.year, month: m };
+                      });
+                    }}
+                    aria-label="Mes siguiente"
+                    style={{
+                      border: '1px solid #00695c',
+                      background: '#fff',
+                      color: '#00695c',
+                      borderRadius: 6,
+                      width: 28,
+                      height: 28,
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    ›
+                  </button>
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, 1fr)',
+                  gap: 3,
+                  textAlign: 'center',
+                }}>
+                  {DIAS_SUM_CORTO.map((d) => (
+                    <div key={`dow-${d}`} style={{ fontSize: 10, fontWeight: 700, color: '#546e7a', padding: '2px 0' }}>
+                      {d}
+                    </div>
+                  ))}
+                  {celdasCalendarioMes(sumCalVista.year, sumCalVista.month).map((dia, idx) => {
+                    if (dia == null) {
+                      return <div key={`empty-${idx}`} />;
+                    }
+                    const iso = isoFechaLocal(sumCalVista.year, sumCalVista.month, dia);
+                    const reservado = diasPintadosSum.has(iso);
+                    const esHoy = iso === hoyISOLocal();
+                    return (
+                      <div
+                        key={iso}
+                        title={reservado ? 'SUM reservado' : undefined}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: reservado || esHoy ? 700 : 500,
+                          padding: '5px 0',
+                          borderRadius: 6,
+                          background: reservado ? '#00695c' : 'transparent',
+                          color: reservado ? '#fff' : '#2c1810',
+                          boxShadow: esHoy && !reservado ? 'inset 0 0 0 1.5px #00695c' : undefined,
+                        }}
+                      >
+                        {dia}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 10, color: '#546e7a' }}>
+                  Días en verde: SUM reservado
+                </div>
+              </div>
+            )}
+
             <table style={{
               width: '100%',
               borderCollapse: 'collapse',
