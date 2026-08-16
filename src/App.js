@@ -80,6 +80,39 @@ function formatearDuracionSum(fechaInicio, horaInicio, fechaFin, horaFin) {
   return `${horas} h ${mins} min`;
 }
 
+function sumToMinutes(fecha, hora) {
+  const [y, m, d] = String(fecha).split('-').map(Number);
+  const [hh, mm] = String(hora).split(':').map(Number);
+  return Date.UTC(y, m - 1, d, hh, mm) / 60000;
+}
+
+function sumRangesOverlap(a, b) {
+  return (
+    sumToMinutes(a.fecha_inicio, a.hora_inicio) < sumToMinutes(b.fecha_fin, b.hora_fin) &&
+    sumToMinutes(b.fecha_inicio, b.hora_inicio) < sumToMinutes(a.fecha_fin, a.hora_fin)
+  );
+}
+
+/** Detecta solape con reservas existentes o entre sí. excludeId ignora esa reserva (edición). */
+function encontrarSolapeSum(candidatos, existentes, excludeId = null) {
+  for (let i = 0; i < candidatos.length; i++) {
+    for (let j = i + 1; j < candidatos.length; j++) {
+      if (sumRangesOverlap(candidatos[i], candidatos[j])) {
+        return `Las fechas ${candidatos[i].fecha_inicio} y ${candidatos[j].fecha_inicio} se superponen en horario`;
+      }
+    }
+  }
+  for (const c of candidatos) {
+    const hit = (existentes || []).find(
+      (r) => r.id !== excludeId && sumRangesOverlap(c, r)
+    );
+    if (hit) {
+      return `Se superpone con "${hit.actividad}" (${hit.fecha_inicio} ${hit.hora_inicio} – ${hit.fecha_fin} ${hit.hora_fin})`;
+    }
+  }
+  return null;
+}
+
 /** Botón "7+" junto a R: copia últimos 7 días con comidas a los 7 siguientes (`handleRepetirSemana`). Poné `true` para volver a mostrarlo. */
 const MOSTRAR_BOTON_7_PLUS = false;
 
@@ -234,6 +267,7 @@ function App() {
   const [showSumModal, setShowSumModal] = useState(false);
   const [reservasSum, setReservasSum] = useState([]);
   const [guardandoSum, setGuardandoSum] = useState(false);
+  const [sumEditId, setSumEditId] = useState(null);
   const [sumForm, setSumForm] = useState(() => {
     const hoy = hoyISOLocal();
     return {
@@ -1485,6 +1519,7 @@ function App() {
 
   const handleOpenSumModal = useCallback(() => {
     const hoy = hoyISOLocal();
+    setSumEditId(null);
     setSumForm({
       fechas: [hoy],
       fecha_fin: hoy,
@@ -1492,6 +1527,20 @@ function App() {
       hora_fin: '10:00',
       actividad: '',
       responsable: '',
+    });
+    setShowSumModal(true);
+  }, []);
+
+  const handleEditarSum = useCallback((reserva) => {
+    if (!reserva) return;
+    setSumEditId(reserva.id);
+    setSumForm({
+      fechas: [reserva.fecha_inicio],
+      fecha_fin: reserva.fecha_fin || reserva.fecha_inicio,
+      hora_inicio: reserva.hora_inicio || '09:00',
+      hora_fin: reserva.hora_fin || '10:00',
+      actividad: reserva.actividad || '',
+      responsable: reserva.responsable || '',
     });
     setShowSumModal(true);
   }, []);
@@ -1507,30 +1556,66 @@ function App() {
       mostrarMensaje('Agregá al menos una fecha', 'error');
       return;
     }
-    const extras = [...new Set((sumForm.fechas || []).slice(1).filter(Boolean))]
-      .filter((f) => f !== primeraFecha);
+    const fechaFinPrimera = (sumForm.fecha_fin || primeraFecha) < primeraFecha
+      ? primeraFecha
+      : (sumForm.fecha_fin || primeraFecha);
     const payloadBase = {
       hora_inicio: sumForm.hora_inicio,
       hora_fin: sumForm.hora_fin,
       actividad: sumForm.actividad,
       responsable: sumForm.responsable,
     };
+
+    // Modo edición: una sola reserva
+    if (sumEditId) {
+      const candidato = {
+        fecha_inicio: primeraFecha,
+        fecha_fin: fechaFinPrimera,
+        ...payloadBase,
+      };
+      const solape = encontrarSolapeSum([candidato], reservasSum, sumEditId);
+      if (solape) {
+        mostrarMensaje(solape, 'error');
+        return;
+      }
+      setGuardandoSum(true);
+      try {
+        await neonApiService.updateReservaSum({ id: sumEditId, ...candidato });
+        mostrarMensaje('Reserva del SUM actualizada', 'success');
+        setShowSumModal(false);
+        setSumEditId(null);
+        await cargarReservasSum();
+      } catch (err) {
+        mostrarMensaje(err.message || 'Error al actualizar reserva', 'error');
+      } finally {
+        setGuardandoSum(false);
+      }
+      return;
+    }
+
+    const extras = [...new Set((sumForm.fechas || []).slice(1).filter(Boolean))]
+      .filter((f) => f !== primeraFecha);
+    const aGuardar = [
+      {
+        fecha_inicio: primeraFecha,
+        fecha_fin: fechaFinPrimera,
+      },
+      ...extras.map((fecha) => ({ fecha_inicio: fecha, fecha_fin: fecha })),
+    ].map((rango) => ({ ...payloadBase, ...rango }));
+
+    const solape = encontrarSolapeSum(aGuardar, reservasSum, null);
+    if (solape) {
+      mostrarMensaje(solape, 'error');
+      return;
+    }
+
     setGuardandoSum(true);
     try {
       let ok = 0;
       const errores = [];
-      const aGuardar = [
-        {
-          fecha_inicio: primeraFecha,
-          fecha_fin: (sumForm.fecha_fin || primeraFecha) < primeraFecha
-            ? primeraFecha
-            : (sumForm.fecha_fin || primeraFecha),
-        },
-        ...extras.map((fecha) => ({ fecha_inicio: fecha, fecha_fin: fecha })),
-      ];
       for (const rango of aGuardar) {
         try {
-          await neonApiService.createReservaSum({ ...payloadBase, ...rango });
+          await neonApiService.createReservaSum(rango);
           ok += 1;
         } catch (err) {
           errores.push(`${rango.fecha_inicio}: ${err.message}`);
@@ -1552,7 +1637,28 @@ function App() {
     } finally {
       setGuardandoSum(false);
     }
-  }, [sumForm, mostrarMensaje, cargarReservasSum]);
+  }, [sumForm, sumEditId, reservasSum, mostrarMensaje, cargarReservasSum]);
+
+  const handleEliminarSum = useCallback(async () => {
+    if (!sumEditId) return;
+    if (!neonApiService.isConfigured()) {
+      mostrarMensaje('API Neon no configurada; no se puede eliminar la reserva', 'error');
+      return;
+    }
+    if (!window.confirm('¿Eliminar esta reserva del SUM?')) return;
+    setGuardandoSum(true);
+    try {
+      await neonApiService.deleteReservaSum(sumEditId);
+      mostrarMensaje('Reserva del SUM eliminada', 'success');
+      setShowSumModal(false);
+      setSumEditId(null);
+      await cargarReservasSum();
+    } catch (err) {
+      mostrarMensaje(err.message || 'Error al eliminar reserva', 'error');
+    } finally {
+      setGuardandoSum(false);
+    }
+  }, [sumEditId, mostrarMensaje, cargarReservasSum]);
 
   const handleAdminSubmit = useCallback((e) => {
     e.preventDefault();
@@ -2640,16 +2746,37 @@ function App() {
             }}>
               <thead>
                 <tr style={{ textAlign: 'left', borderBottom: '1px solid #00695c' }}>
+                  <th style={{ padding: '3px 0', width: '22px' }} aria-label="Editar" />
                   <th style={{ padding: '3px 2px', width: '14%' }}>Fecha</th>
                   <th style={{ padding: '3px 2px', width: '12%' }}>Hora</th>
-                  <th style={{ padding: '3px 2px', width: '18%' }}>Dur.</th>
-                  <th style={{ padding: '3px 2px', width: '28%' }}>Actividad</th>
-                  <th style={{ padding: '3px 2px', width: '28%' }}>Resp.</th>
+                  <th style={{ padding: '3px 2px', width: '16%' }}>Dur.</th>
+                  <th style={{ padding: '3px 2px', width: '29%' }}>Actividad</th>
+                  <th style={{ padding: '3px 2px', width: '29%' }}>Resp.</th>
                 </tr>
               </thead>
               <tbody>
                 {reservasSum.map((r) => (
                   <tr key={r.id} style={{ borderBottom: '1px solid rgba(0,105,92,0.2)' }}>
+                    <td style={{ padding: '3px 0', verticalAlign: 'top', width: '22px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleEditarSum(r)}
+                        title="Editar reserva"
+                        aria-label="Editar reserva"
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          padding: 0,
+                          width: 18,
+                          fontSize: 13,
+                          lineHeight: 1,
+                          color: '#00695c',
+                        }}
+                      >
+                        ✎
+                      </button>
+                    </td>
                     <td style={{ padding: '3px 2px', verticalAlign: 'top' }}>
                       {formatearFecha(r.fecha_inicio, 'misa')}
                     </td>
@@ -3394,14 +3521,17 @@ function App() {
       {/* Modal Reserva SUM */}
       <Modal
         isOpen={showSumModal}
-        onRequestClose={() => setShowSumModal(false)}
+        onRequestClose={() => {
+          setShowSumModal(false);
+          setSumEditId(null);
+        }}
         style={{
           content: {
-            maxWidth: 420,
-            width: '92vw',
+            maxWidth: 294,
+            width: '88vw',
             maxHeight: '90vh',
             margin: 'auto',
-            padding: 18,
+            padding: 14,
             borderRadius: 'var(--border-radius)',
             zIndex: 9999,
             background: 'linear-gradient(180deg, #e0f2f1 0%, #fff 100%)',
@@ -3419,10 +3549,15 @@ function App() {
         contentLabel="Reserva SUM"
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 }}>
-          <h3 style={{ color: '#00695c', margin: 0, fontSize: '17px' }}>Reserva del SUM</h3>
+          <h3 style={{ color: '#00695c', margin: 0, fontSize: '16px' }}>
+            {sumEditId ? 'Editar reserva SUM' : 'Reserva del SUM'}
+          </h3>
           <button
             type="button"
-            onClick={() => setShowSumModal(false)}
+            onClick={() => {
+              setShowSumModal(false);
+              setSumEditId(null);
+            }}
             style={{
               padding: '6px 10px',
               borderRadius: '8px',
@@ -3472,7 +3607,7 @@ function App() {
               style={{ padding: 8 }}
             />
           </label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
               Hora inicio
               <select
@@ -3527,7 +3662,7 @@ function App() {
             />
           </label>
 
-          {sumForm.fechas.slice(1).map((fecha, idx) => {
+          {!sumEditId && sumForm.fechas.slice(1).map((fecha, idx) => {
             const index = idx + 1;
             return (
               <div key={`fecha-extra-${index}`} style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
@@ -3576,47 +3711,76 @@ function App() {
             );
           })}
 
-          <button
-            type="button"
-            onClick={() => {
-              setSumForm((prev) => ({
-                ...prev,
-                fechas: [...prev.fechas, prev.fechas[prev.fechas.length - 1] || hoyISOLocal()],
-              }));
-            }}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '2px dashed #00695c',
-              background: 'rgba(0, 105, 92, 0.06)',
-              color: '#00695c',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: 13,
-            }}
-          >
-            + Agregar fecha
-          </button>
+          {!sumEditId && (
+            <button
+              type="button"
+              onClick={() => {
+                setSumForm((prev) => ({
+                  ...prev,
+                  fechas: [...prev.fechas, prev.fechas[prev.fechas.length - 1] || hoyISOLocal()],
+                }));
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '2px dashed #00695c',
+                background: 'rgba(0, 105, 92, 0.06)',
+                color: '#00695c',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              + Agregar fecha
+            </button>
+          )}
 
-          <button
-            type="submit"
-            disabled={guardandoSum}
-            className="btn btn-primary"
-            style={{
-              marginTop: 4,
-              background: guardandoSum ? '#80cbc4' : '#00695c',
-              border: 'none',
-              padding: '10px 16px',
-              fontWeight: 'bold',
-              cursor: guardandoSum ? 'wait' : 'pointer',
-            }}
-          >
-            {guardandoSum
-              ? 'Guardando...'
-              : sumForm.fechas.length > 1
-                ? `Guardar ${sumForm.fechas.length} reservas`
-                : 'Guardar reserva'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'stretch' }}>
+            <button
+              type="submit"
+              disabled={guardandoSum}
+              className="btn btn-primary"
+              style={{
+                flex: 1,
+                background: guardandoSum ? '#80cbc4' : '#00695c',
+                border: 'none',
+                padding: '10px 16px',
+                fontWeight: 'bold',
+                color: '#fff',
+                cursor: guardandoSum ? 'wait' : 'pointer',
+              }}
+            >
+              {guardandoSum
+                ? 'Guardando...'
+                : sumEditId
+                  ? 'Guardar cambios'
+                  : sumForm.fechas.length > 1
+                    ? `Guardar ${sumForm.fechas.length} reservas`
+                    : 'Guardar reserva'}
+            </button>
+            {sumEditId && (
+              <button
+                type="button"
+                disabled={guardandoSum}
+                onClick={handleEliminarSum}
+                title="Eliminar reserva"
+                aria-label="Eliminar reserva"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  border: '2px solid #c62828',
+                  background: '#fff',
+                  color: '#c62828',
+                  fontWeight: 'bold',
+                  cursor: guardandoSum ? 'wait' : 'pointer',
+                  fontSize: 18,
+                  lineHeight: 1,
+                }}
+              >
+                🗑
+              </button>
+            )}
+          </div>
         </form>
       </Modal>
 

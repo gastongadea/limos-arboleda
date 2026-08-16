@@ -134,6 +134,13 @@ class NeonApiService {
     });
   }
 
+  async updateReservaSum(reserva) {
+    return this._fetch('api/reservas-sum', {
+      method: 'PUT',
+      body: reserva,
+    });
+  }
+
   async deleteReservaSum(id) {
     return this._fetch('api/reservas-sum', {
       method: 'DELETE',

@@ -23,6 +23,67 @@ function toMinutes(fecha, hora) {
   return Date.UTC(y, m - 1, d, hh, mm) / 60000;
 }
 
+function parseReservaFields(body) {
+  const fechaInicio = body.fecha_inicio || body.fechaInicio;
+  const fechaFin = body.fecha_fin || body.fechaFin || fechaInicio;
+  const horaInicio = body.hora_inicio || body.horaInicio;
+  const horaFin = body.hora_fin || body.horaFin;
+  const actividad = body.actividad == null ? '' : String(body.actividad).trim();
+  const responsable = body.responsable == null ? '' : String(body.responsable).trim();
+  return { fechaInicio, fechaFin, horaInicio, horaFin, actividad, responsable };
+}
+
+function validateReservaFields({ fechaInicio, fechaFin, horaInicio, horaFin, actividad, responsable }) {
+  if (!fechaInicio || !horaInicio || !horaFin) {
+    return 'Faltan fecha_inicio, hora_inicio u hora_fin';
+  }
+  if (!isValidTime(horaInicio) || !isValidTime(horaFin)) {
+    return 'Horas inválidas (usar HH:MM entre 09:00 y 22:00, cada 30 min)';
+  }
+  if (toMinutes(fechaFin, horaFin) <= toMinutes(fechaInicio, horaInicio)) {
+    return 'La fecha/hora de fin debe ser posterior al inicio';
+  }
+  if (!actividad) return 'Completá la actividad';
+  if (!responsable) return 'Completá el responsable';
+  return null;
+}
+
+async function findOverlap(db, { fechaInicio, fechaFin, horaInicio, horaFin, excludeId }) {
+  const rows = excludeId
+    ? await db`
+        SELECT
+          id,
+          fecha_inicio::text AS fecha_inicio,
+          fecha_fin::text AS fecha_fin,
+          hora_inicio,
+          hora_fin,
+          actividad
+        FROM reservas_sum
+        WHERE id <> ${excludeId}
+          AND (fecha_inicio + hora_inicio::time) < (${fechaFin}::date + ${horaFin}::time)
+          AND (${fechaInicio}::date + ${horaInicio}::time) < (fecha_fin + hora_fin::time)
+        LIMIT 1
+      `
+    : await db`
+        SELECT
+          id,
+          fecha_inicio::text AS fecha_inicio,
+          fecha_fin::text AS fecha_fin,
+          hora_inicio,
+          hora_fin,
+          actividad
+        FROM reservas_sum
+        WHERE (fecha_inicio + hora_inicio::time) < (${fechaFin}::date + ${horaFin}::time)
+          AND (${fechaInicio}::date + ${horaInicio}::time) < (fecha_fin + hora_fin::time)
+        LIMIT 1
+      `;
+  return rows[0] || null;
+}
+
+function overlapErrorMessage(row) {
+  return `Se superpone con "${row.actividad}" (${row.fecha_inicio} ${row.hora_inicio} – ${row.fecha_fin} ${row.hora_fin})`;
+}
+
 module.exports = async function handler(req, res) {
   setCors(res, req);
   if (req.method === 'OPTIONS') return handleOptions(req, res);
@@ -52,37 +113,15 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const body = parseBody(req);
-      const fechaInicio = body.fecha_inicio || body.fechaInicio;
-      const fechaFin = body.fecha_fin || body.fechaFin || fechaInicio;
-      const horaInicio = body.hora_inicio || body.horaInicio;
-      const horaFin = body.hora_fin || body.horaFin;
-      const actividad = body.actividad == null ? '' : String(body.actividad).trim();
-      const responsable = body.responsable == null ? '' : String(body.responsable).trim();
+      const fields = parseReservaFields(parseBody(req));
+      const validationError = validateReservaFields(fields);
+      if (validationError) {
+        return res.status(400).json({ success: false, error: validationError });
+      }
 
-      if (!fechaInicio || !horaInicio || !horaFin) {
-        return res.status(400).json({
-          success: false,
-          error: 'Faltan fecha_inicio, hora_inicio u hora_fin',
-        });
-      }
-      if (!isValidTime(horaInicio) || !isValidTime(horaFin)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Horas inválidas (usar HH:MM entre 09:00 y 22:00, cada 30 min)',
-        });
-      }
-      if (toMinutes(fechaFin, horaFin) <= toMinutes(fechaInicio, horaInicio)) {
-        return res.status(400).json({
-          success: false,
-          error: 'La fecha/hora de fin debe ser posterior al inicio',
-        });
-      }
-      if (!actividad) {
-        return res.status(400).json({ success: false, error: 'Completá la actividad' });
-      }
-      if (!responsable) {
-        return res.status(400).json({ success: false, error: 'Completá el responsable' });
+      const overlap = await findOverlap(db, fields);
+      if (overlap) {
+        return res.status(409).json({ success: false, error: overlapErrorMessage(overlap) });
       }
 
       const inserted = await db`
@@ -90,12 +129,12 @@ module.exports = async function handler(req, res) {
           fecha_inicio, fecha_fin, hora_inicio, hora_fin, actividad, responsable
         )
         VALUES (
-          ${fechaInicio}::date,
-          ${fechaFin}::date,
-          ${horaInicio},
-          ${horaFin},
-          ${actividad},
-          ${responsable}
+          ${fields.fechaInicio}::date,
+          ${fields.fechaFin}::date,
+          ${fields.horaInicio},
+          ${fields.horaFin},
+          ${fields.actividad},
+          ${fields.responsable}
         )
         RETURNING
           id,
@@ -110,6 +149,53 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, row: inserted[0] });
     }
 
+    if (req.method === 'PUT') {
+      const body = parseBody(req);
+      const id = body.id || req.query?.id;
+      if (!id) {
+        return res.status(400).json({ success: false, error: 'Falta id' });
+      }
+
+      const fields = parseReservaFields(body);
+      const validationError = validateReservaFields(fields);
+      if (validationError) {
+        return res.status(400).json({ success: false, error: validationError });
+      }
+
+      const existing = await db`
+        SELECT id FROM reservas_sum WHERE id = ${id} LIMIT 1
+      `;
+      if (!existing[0]) {
+        return res.status(404).json({ success: false, error: 'Reserva no encontrada' });
+      }
+
+      const overlap = await findOverlap(db, { ...fields, excludeId: id });
+      if (overlap) {
+        return res.status(409).json({ success: false, error: overlapErrorMessage(overlap) });
+      }
+
+      const updated = await db`
+        UPDATE reservas_sum SET
+          fecha_inicio = ${fields.fechaInicio}::date,
+          fecha_fin = ${fields.fechaFin}::date,
+          hora_inicio = ${fields.horaInicio},
+          hora_fin = ${fields.horaFin},
+          actividad = ${fields.actividad},
+          responsable = ${fields.responsable}
+        WHERE id = ${id}
+        RETURNING
+          id,
+          fecha_inicio::text AS fecha_inicio,
+          fecha_fin::text AS fecha_fin,
+          hora_inicio,
+          hora_fin,
+          actividad,
+          responsable
+      `;
+
+      return res.status(200).json({ success: true, row: updated[0] });
+    }
+
     if (req.method === 'DELETE') {
       const id = req.query?.id || parseBody(req).id;
       if (!id) {
@@ -119,7 +205,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    res.setHeader('Allow', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Allow', 'GET, POST, PUT, DELETE, OPTIONS');
     return res.status(405).json({ success: false, error: 'Método no permitido' });
   } catch (error) {
     console.error('reservas-sum error:', error);
