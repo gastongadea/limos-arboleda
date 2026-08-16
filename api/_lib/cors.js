@@ -28,7 +28,7 @@ function setCors(res, req) {
   }
 
   res.setHeader('Access-Control-Allow-Origin', allow);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Api-Key');
   res.setHeader('Access-Control-Max-Age', '86400');
   if (allow !== '*') {

@@ -34,3 +34,18 @@ CREATE TABLE IF NOT EXISTS misa (
 CREATE INDEX IF NOT EXISTS idx_misa_pending
   ON misa (updated_at)
   WHERE synced_at IS NULL OR synced_at < updated_at;
+
+CREATE TABLE IF NOT EXISTS reservas_sum (
+  id BIGSERIAL PRIMARY KEY,
+  fecha_inicio DATE NOT NULL,
+  fecha_fin DATE NOT NULL,
+  hora_inicio VARCHAR(5) NOT NULL,
+  hora_fin VARCHAR(5) NOT NULL,
+  actividad TEXT NOT NULL DEFAULT '',
+  responsable TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reservas_sum_inicio
+  ON reservas_sum (fecha_inicio, hora_inicio);
+

@@ -36,10 +36,22 @@ async function ensureSchema() {
       CONSTRAINT uq_misa_fecha UNIQUE (fecha)
     )
   `;
-  // Migración: la primera versión usaba VARCHAR(5) y fallaba el import
   await db`ALTER TABLE misa ALTER COLUMN valor TYPE TEXT`;
+  await db`
+    CREATE TABLE IF NOT EXISTS reservas_sum (
+      id BIGSERIAL PRIMARY KEY,
+      fecha_inicio DATE NOT NULL,
+      fecha_fin DATE NOT NULL,
+      hora_inicio VARCHAR(5) NOT NULL,
+      hora_fin VARCHAR(5) NOT NULL,
+      actividad TEXT NOT NULL DEFAULT '',
+      responsable TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
   await db`CREATE INDEX IF NOT EXISTS idx_inscripciones_usuario_fecha ON inscripciones (iniciales, fecha)`;
   await db`CREATE INDEX IF NOT EXISTS idx_inscripciones_fecha ON inscripciones (fecha)`;
+  await db`CREATE INDEX IF NOT EXISTS idx_reservas_sum_inicio ON reservas_sum (fecha_inicio, hora_inicio)`;
   return true;
 }
 

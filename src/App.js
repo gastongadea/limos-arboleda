@@ -39,6 +39,37 @@ const opcionesCena = [
 const opcionesMisa = ['S', 'N', 'A'];
 const diasSemana = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+function generarHorasSum() {
+  const horas = [];
+  for (let h = 9; h <= 22; h++) {
+    horas.push(`${String(h).padStart(2, '0')}:00`);
+    if (h < 22) horas.push(`${String(h).padStart(2, '0')}:30`);
+  }
+  return horas;
+}
+const HORAS_SUM = generarHorasSum();
+
+function hoyISOLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatearDuracionSum(fechaInicio, horaInicio, fechaFin, horaFin) {
+  const [y1, m1, d1] = String(fechaInicio).split('-').map(Number);
+  const [y2, m2, d2] = String(fechaFin).split('-').map(Number);
+  const [h1, min1] = String(horaInicio).split(':').map(Number);
+  const [h2, min2] = String(horaFin).split(':').map(Number);
+  const totalMin = Math.round(
+    (Date.UTC(y2, m2 - 1, d2, h2, min2) - Date.UTC(y1, m1 - 1, d1, h1, min1)) / 60000
+  );
+  if (totalMin <= 0) return '—';
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (m === 0) return h === 1 ? '1 h' : `${h} h`;
+  return `${h} h ${m} min`;
+}
+
 /** Botón "7+" junto a R: copia últimos 7 días con comidas a los 7 siguientes (`handleRepetirSemana`). Poné `true` para volver a mostrarlo. */
 const MOSTRAR_BOTON_7_PLUS = false;
 
@@ -188,6 +219,22 @@ function App() {
   const [misaSeleccion, setMisaSeleccion] = useState({});
   const [misaProximos7, setMisaProximos7] = useState({});
   const [actualizandoMisa, setActualizandoMisa] = useState(false);
+
+  // Reserva SUM
+  const [showSumModal, setShowSumModal] = useState(false);
+  const [reservasSum, setReservasSum] = useState([]);
+  const [guardandoSum, setGuardandoSum] = useState(false);
+  const [sumForm, setSumForm] = useState(() => {
+    const hoy = hoyISOLocal();
+    return {
+      fecha_inicio: hoy,
+      fecha_fin: hoy,
+      hora_inicio: '09:00',
+      hora_fin: '10:00',
+      actividad: '',
+      responsable: '',
+    };
+  });
   
   // Cumpleaños: próximos 30 días desde hoja Cumpleaños
   const [cumpleanosProximos, setCumpleanosProximos] = useState([]);
@@ -1407,6 +1454,57 @@ function App() {
     }
   }, [misaSeleccion, cargarMisaProximos7, mostrarMensaje]);
 
+  const cargarReservasSum = useCallback(async () => {
+    if (!neonApiService.isConfigured()) {
+      setReservasSum([]);
+      return;
+    }
+    try {
+      const rows = await neonApiService.getReservasSum(hoyISOLocal());
+      setReservasSum(rows);
+    } catch (e) {
+      console.warn('Error cargando reservas SUM:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!iniciales && !mostrandoAnotadosHoy) {
+      cargarReservasSum();
+    }
+  }, [iniciales, mostrandoAnotadosHoy, cargarReservasSum]);
+
+  const handleOpenSumModal = useCallback(() => {
+    const hoy = hoyISOLocal();
+    setSumForm({
+      fecha_inicio: hoy,
+      fecha_fin: hoy,
+      hora_inicio: '09:00',
+      hora_fin: '10:00',
+      actividad: '',
+      responsable: '',
+    });
+    setShowSumModal(true);
+  }, []);
+
+  const handleGuardarSum = useCallback(async (e) => {
+    if (e) e.preventDefault();
+    if (!neonApiService.isConfigured()) {
+      mostrarMensaje('API Neon no configurada; no se puede guardar la reserva', 'error');
+      return;
+    }
+    setGuardandoSum(true);
+    try {
+      await neonApiService.createReservaSum(sumForm);
+      mostrarMensaje('Reserva del SUM guardada', 'success');
+      setShowSumModal(false);
+      await cargarReservasSum();
+    } catch (err) {
+      mostrarMensaje(err.message || 'Error al guardar reserva', 'error');
+    } finally {
+      setGuardandoSum(false);
+    }
+  }, [sumForm, mostrarMensaje, cargarReservasSum]);
+
   const handleAdminSubmit = useCallback((e) => {
     e.preventDefault();
     if (adminClave === CONFIG.CLAVE_ADMIN) {
@@ -2221,36 +2319,66 @@ function App() {
             // Botón Misa: abre el modal de S/N/A por día, no la vista de comidas
             if (esMisa) {
               return (
-                <button
-                  key={ini}
-                  type="button"
-                  style={{
-                    fontSize: '13px',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '2px solid #e65100',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
-                    color: '#bf360c',
-                    boxShadow: '0 4px 16px rgba(230, 81, 0, 0.2)',
-                    fontWeight: 'bold',
-                  }}
-                  onClick={handleOpenMisaModal}
-                  title="Misa - S/N/A por día"
-                  onMouseEnter={(e) => {
-                    e.target.style.background = 'linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%)';
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 8px 24px rgba(230, 81, 0, 0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)';
-                    e.target.style.transform = 'none';
-                    e.target.style.boxShadow = '0 4px 16px rgba(230, 81, 0, 0.2)';
-                  }}
-                >
-                  Misa
-                </button>
+                <React.Fragment key="misa-sum">
+                  <button
+                    type="button"
+                    style={{
+                      fontSize: '13px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '2px solid #e65100',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                      color: '#bf360c',
+                      boxShadow: '0 4px 16px rgba(230, 81, 0, 0.2)',
+                      fontWeight: 'bold',
+                    }}
+                    onClick={handleOpenMisaModal}
+                    title="Misa - S/N/A por día"
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%)';
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 8px 24px rgba(230, 81, 0, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)';
+                      e.target.style.transform = 'none';
+                      e.target.style.boxShadow = '0 4px 16px rgba(230, 81, 0, 0.2)';
+                    }}
+                  >
+                    Misa
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      fontSize: '13px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '2px solid #00695c',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      background: 'linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)',
+                      color: '#004d40',
+                      boxShadow: '0 4px 16px rgba(0, 105, 92, 0.2)',
+                      fontWeight: 'bold',
+                    }}
+                    onClick={handleOpenSumModal}
+                    title="Reservar el SUM"
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'linear-gradient(135deg, #b2dfdb 0%, #80cbc4 100%)';
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 8px 24px rgba(0, 105, 92, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)';
+                      e.target.style.transform = 'none';
+                      e.target.style.boxShadow = '0 4px 16px rgba(0, 105, 92, 0.2)';
+                    }}
+                  >
+                    SUM
+                  </button>
+                </React.Fragment>
               );
             }
 
@@ -2340,6 +2468,29 @@ function App() {
               </button>
             );
           })}
+          {/* SUM si Misa no está en la lista de botones */}
+          {!iniciales && !mostrandoAnotadosHoy &&
+            !(usuariosDinamicos.length > 0 ? usuariosDinamicos : inicialesLista).includes('Misa') && (
+            <button
+              type="button"
+              style={{
+                fontSize: '13px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '2px solid #00695c',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                background: 'linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)',
+                color: '#004d40',
+                boxShadow: '0 4px 16px rgba(0, 105, 92, 0.2)',
+                fontWeight: 'bold',
+              }}
+              onClick={handleOpenSumModal}
+              title="Reservar el SUM"
+            >
+              SUM
+            </button>
+          )}
         </div>
 
         {/* Misa - Próximos 8 días (solo en pantalla principal, no en vista de comidas del comensal ni en Anotados para hoy) */}
@@ -2415,6 +2566,53 @@ function App() {
             <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#1b5e20' }}>
               Próximos cumpleaños: {cumpleanosProximos.map(c => c.edad != null ? `${c.fechaDisplay} ${c.inicial} (${c.edad})` : `${c.fechaDisplay} ${c.inicial}`).join(', ')}
             </span>
+          </div>
+        )}
+
+        {/* Próximas reservas del SUM */}
+        {!iniciales && !mostrandoAnotadosHoy && reservasSum.length > 0 && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)',
+            border: '2px solid #00695c',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0, 105, 92, 0.15)',
+            overflowX: 'auto',
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#004d40', marginBottom: 8 }}>
+              Próximas reservas del SUM
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', color: '#2c1810' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #00695c' }}>
+                  <th style={{ padding: '6px 8px' }}>Fecha</th>
+                  <th style={{ padding: '6px 8px' }}>Hora</th>
+                  <th style={{ padding: '6px 8px' }}>Duración</th>
+                  <th style={{ padding: '6px 8px' }}>Actividad</th>
+                  <th style={{ padding: '6px 8px' }}>Responsable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reservasSum.map((r) => {
+                  const mismaFecha = r.fecha_inicio === r.fecha_fin;
+                  const fechaLabel = mismaFecha
+                    ? formatearFecha(r.fecha_inicio, 'misa')
+                    : `${formatearFecha(r.fecha_inicio, 'misa')} – ${formatearFecha(r.fecha_fin, 'misa')}`;
+                  return (
+                    <tr key={r.id} style={{ borderBottom: '1px solid rgba(0,105,92,0.2)' }}>
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{fechaLabel}</td>
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{r.hora_inicio}</td>
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                        {formatearDuracionSum(r.fecha_inicio, r.hora_inicio, r.fecha_fin, r.hora_fin)}
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>{r.actividad}</td>
+                      <td style={{ padding: '6px 8px' }}>{r.responsable}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -3021,10 +3219,11 @@ function App() {
         onRequestClose={() => setShowMisaModal(false)}
         style={{
           content: {
-            maxWidth: 340,
+            maxWidth: 250,
+            width: '90vw',
             maxHeight: '85vh',
             margin: 'auto',
-            padding: 20,
+            padding: 14,
             borderRadius: 'var(--border-radius)',
             zIndex: 9999,
             background: 'linear-gradient(180deg, #faf5ff 0%, #fff 100%)',
@@ -3041,19 +3240,20 @@ function App() {
         }}
         contentLabel="Misa"
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ color: '#5e35b1', margin: 0, fontSize: '18px' }}>Misa – S / N / A por día</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+          <h3 style={{ color: '#5e35b1', margin: 0, fontSize: '16px' }}>Misa</h3>
           <button
             type="button"
             onClick={() => setShowMisaModal(false)}
             style={{
-              padding: '8px 14px',
+              padding: '6px 10px',
               borderRadius: '8px',
               border: '2px solid #5e35b1',
               background: '#fff',
               color: '#5e35b1',
               fontWeight: 'bold',
               cursor: 'pointer',
+              fontSize: '13px',
             }}
           >
             Cerrar
@@ -3064,38 +3264,39 @@ function App() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '8px 16px',
-            marginBottom: 16,
+            padding: '8px 12px',
+            marginBottom: 12,
             background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
             border: '2px solid #e65100',
             borderRadius: '8px',
             color: '#bf360c',
             fontWeight: 'bold',
-            fontSize: '14px',
+            fontSize: '13px',
             boxShadow: '0 2px 8px rgba(230, 81, 0, 0.2)',
             whiteSpace: 'nowrap'
           }}>
             🔄 Esperá...
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '60vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '60vh', overflowY: 'auto' }}>
           {dias.map(dia => (
             <div
               key={dia}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
+                justifyContent: 'flex-start',
+                gap: 8,
+                padding: '6px 8px',
                 background: esFinDeSemana(dia) ? 'rgba(94, 53, 177, 0.08)' : '#fff',
                 border: '1px solid #e0e0e0',
                 borderRadius: '8px',
               }}
             >
-              <span style={{ fontWeight: '600', color: '#2c1810', minWidth: '72px' }}>
+              <span style={{ fontWeight: '600', color: '#2c1810', minWidth: '52px', fontSize: '13px' }}>
                 {formatearFecha(dia, 'misa')}
               </span>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 4 }}>
                 {opcionesMisa.map(op => {
                   const selected = (misaSeleccion[dia] || '') === op;
                   return (
@@ -3104,8 +3305,8 @@ function App() {
                       type="button"
                       onClick={() => handleMisaChange(dia, op)}
                       style={{
-                        width: 36,
-                        height: 36,
+                        width: 32,
+                        height: 32,
                         padding: 0,
                         borderRadius: '8px',
                         border: selected ? '2px solid #5e35b1' : '2px solid #e0e0e0',
@@ -3113,7 +3314,7 @@ function App() {
                         color: selected ? '#fff' : '#2c1810',
                         fontWeight: 'bold',
                         cursor: 'pointer',
-                        fontSize: '14px',
+                        fontSize: '13px',
                       }}
                     >
                       {op}
@@ -3124,6 +3325,155 @@ function App() {
             </div>
           ))}
         </div>
+      </Modal>
+
+      {/* Modal Reserva SUM */}
+      <Modal
+        isOpen={showSumModal}
+        onRequestClose={() => setShowSumModal(false)}
+        style={{
+          content: {
+            maxWidth: 420,
+            width: '92vw',
+            maxHeight: '90vh',
+            margin: 'auto',
+            padding: 18,
+            borderRadius: 'var(--border-radius)',
+            zIndex: 9999,
+            background: 'linear-gradient(180deg, #e0f2f1 0%, #fff 100%)',
+            border: '3px solid #00695c',
+            boxShadow: '0 8px 32px rgba(0, 105, 92, 0.25)',
+            position: 'relative',
+            overflow: 'auto',
+          },
+          overlay: {
+            zIndex: 9998,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(5px)',
+          },
+        }}
+        contentLabel="Reserva SUM"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 }}>
+          <h3 style={{ color: '#00695c', margin: 0, fontSize: '17px' }}>Reserva del SUM</h3>
+          <button
+            type="button"
+            onClick={() => setShowSumModal(false)}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '8px',
+              border: '2px solid #00695c',
+              background: '#fff',
+              color: '#00695c',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            Cerrar
+          </button>
+        </div>
+        <form onSubmit={handleGuardarSum} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+            Fecha inicio
+            <input
+              type="date"
+              required
+              value={sumForm.fecha_inicio}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSumForm((prev) => ({
+                  ...prev,
+                  fecha_inicio: v,
+                  fecha_fin: prev.fecha_fin < v ? v : prev.fecha_fin,
+                }));
+              }}
+              className="form-input"
+              style={{ padding: 8 }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+            Fecha fin
+            <input
+              type="date"
+              required
+              value={sumForm.fecha_fin}
+              min={sumForm.fecha_inicio}
+              onChange={(e) => setSumForm((prev) => ({ ...prev, fecha_fin: e.target.value }))}
+              className="form-input"
+              style={{ padding: 8 }}
+            />
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+              Hora inicio
+              <select
+                required
+                value={sumForm.hora_inicio}
+                onChange={(e) => setSumForm((prev) => ({ ...prev, hora_inicio: e.target.value }))}
+                className="form-input"
+                style={{ padding: 8 }}
+              >
+                {HORAS_SUM.map((h) => (
+                  <option key={`ini-${h}`} value={h}>{h}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+              Hora fin
+              <select
+                required
+                value={sumForm.hora_fin}
+                onChange={(e) => setSumForm((prev) => ({ ...prev, hora_fin: e.target.value }))}
+                className="form-input"
+                style={{ padding: 8 }}
+              >
+                {HORAS_SUM.map((h) => (
+                  <option key={`fin-${h}`} value={h}>{h}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+            Actividad
+            <input
+              type="text"
+              required
+              value={sumForm.actividad}
+              onChange={(e) => setSumForm((prev) => ({ ...prev, actividad: e.target.value }))}
+              className="form-input"
+              style={{ padding: 8 }}
+              placeholder="Ej. reunión, taller..."
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40' }}>
+            Responsable
+            <input
+              type="text"
+              required
+              value={sumForm.responsable}
+              onChange={(e) => setSumForm((prev) => ({ ...prev, responsable: e.target.value }))}
+              className="form-input"
+              style={{ padding: 8 }}
+              placeholder="Nombre o iniciales"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={guardandoSum}
+            className="btn btn-primary"
+            style={{
+              marginTop: 4,
+              background: guardandoSum ? '#80cbc4' : '#00695c',
+              border: 'none',
+              padding: '10px 16px',
+              fontWeight: 'bold',
+              cursor: guardandoSum ? 'wait' : 'pointer',
+            }}
+          >
+            {guardandoSum ? 'Guardando...' : 'Guardar reserva'}
+          </button>
+        </form>
       </Modal>
 
       {/* Modal de Gestión de Datos */}

@@ -120,6 +120,26 @@ class NeonApiService {
   async importFromSheets() {
     return this._fetch('api/import-from-sheets', { method: 'POST' });
   }
+
+  async getReservasSum(from) {
+    const hoy = from || new Date().toISOString().slice(0, 10);
+    const result = await this._fetch('api/reservas-sum', { params: { from: hoy } });
+    return result.rows || [];
+  }
+
+  async createReservaSum(reserva) {
+    return this._fetch('api/reservas-sum', {
+      method: 'POST',
+      body: reserva,
+    });
+  }
+
+  async deleteReservaSum(id) {
+    return this._fetch('api/reservas-sum', {
+      method: 'DELETE',
+      params: { id },
+    });
+  }
 }
 
 const neonApiService = new NeonApiService();
