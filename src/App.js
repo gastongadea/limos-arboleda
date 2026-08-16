@@ -237,7 +237,7 @@ function App() {
   const [sumForm, setSumForm] = useState(() => {
     const hoy = hoyISOLocal();
     return {
-      fecha_inicio: hoy,
+      fechas: [hoy],
       fecha_fin: hoy,
       hora_inicio: '09:00',
       hora_fin: '10:00',
@@ -1486,7 +1486,7 @@ function App() {
   const handleOpenSumModal = useCallback(() => {
     const hoy = hoyISOLocal();
     setSumForm({
-      fecha_inicio: hoy,
+      fechas: [hoy],
       fecha_fin: hoy,
       hora_inicio: '09:00',
       hora_fin: '10:00',
@@ -1502,12 +1502,51 @@ function App() {
       mostrarMensaje('API Neon no configurada; no se puede guardar la reserva', 'error');
       return;
     }
+    const primeraFecha = (sumForm.fechas || [])[0];
+    if (!primeraFecha) {
+      mostrarMensaje('Agregá al menos una fecha', 'error');
+      return;
+    }
+    const extras = [...new Set((sumForm.fechas || []).slice(1).filter(Boolean))]
+      .filter((f) => f !== primeraFecha);
+    const payloadBase = {
+      hora_inicio: sumForm.hora_inicio,
+      hora_fin: sumForm.hora_fin,
+      actividad: sumForm.actividad,
+      responsable: sumForm.responsable,
+    };
     setGuardandoSum(true);
     try {
-      await neonApiService.createReservaSum(sumForm);
-      mostrarMensaje('Reserva del SUM guardada', 'success');
-      setShowSumModal(false);
-      await cargarReservasSum();
+      let ok = 0;
+      const errores = [];
+      const aGuardar = [
+        {
+          fecha_inicio: primeraFecha,
+          fecha_fin: (sumForm.fecha_fin || primeraFecha) < primeraFecha
+            ? primeraFecha
+            : (sumForm.fecha_fin || primeraFecha),
+        },
+        ...extras.map((fecha) => ({ fecha_inicio: fecha, fecha_fin: fecha })),
+      ];
+      for (const rango of aGuardar) {
+        try {
+          await neonApiService.createReservaSum({ ...payloadBase, ...rango });
+          ok += 1;
+        } catch (err) {
+          errores.push(`${rango.fecha_inicio}: ${err.message}`);
+        }
+      }
+      if (ok > 0) {
+        mostrarMensaje(
+          ok === 1 ? 'Reserva del SUM guardada' : `${ok} reservas del SUM guardadas`,
+          errores.length ? 'warning' : 'success'
+        );
+        setShowSumModal(false);
+        await cargarReservasSum();
+      }
+      if (errores.length) {
+        mostrarMensaje(errores.slice(0, 3).join(' · '), 'error');
+      }
     } catch (err) {
       mostrarMensaje(err.message || 'Error al guardar reserva', 'error');
     } finally {
@@ -3404,14 +3443,18 @@ function App() {
             <input
               type="date"
               required
-              value={sumForm.fecha_inicio}
+              value={sumForm.fechas[0] || ''}
               onChange={(e) => {
                 const v = e.target.value;
-                setSumForm((prev) => ({
-                  ...prev,
-                  fecha_inicio: v,
-                  fecha_fin: prev.fecha_fin < v ? v : prev.fecha_fin,
-                }));
+                setSumForm((prev) => {
+                  const fechas = [...prev.fechas];
+                  fechas[0] = v;
+                  return {
+                    ...prev,
+                    fechas,
+                    fecha_fin: prev.fecha_fin < v ? v : prev.fecha_fin,
+                  };
+                });
               }}
               className="form-input"
               style={{ padding: 8 }}
@@ -3422,8 +3465,8 @@ function App() {
             <input
               type="date"
               required
-              value={sumForm.fecha_fin}
-              min={sumForm.fecha_inicio}
+              value={sumForm.fecha_fin || ''}
+              min={sumForm.fechas[0] || undefined}
               onChange={(e) => setSumForm((prev) => ({ ...prev, fecha_fin: e.target.value }))}
               className="form-input"
               style={{ padding: 8 }}
@@ -3483,6 +3526,78 @@ function App() {
               placeholder="Nombre o iniciales"
             />
           </label>
+
+          {sumForm.fechas.slice(1).map((fecha, idx) => {
+            const index = idx + 1;
+            return (
+              <div key={`fecha-extra-${index}`} style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#004d40', flex: 1 }}>
+                  Fecha {index + 1}
+                  <input
+                    type="date"
+                    required
+                    value={fecha || ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSumForm((prev) => {
+                        const fechas = [...prev.fechas];
+                        fechas[index] = v;
+                        return { ...prev, fechas };
+                      });
+                    }}
+                    className="form-input"
+                    style={{ padding: 8 }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSumForm((prev) => ({
+                      ...prev,
+                      fechas: prev.fechas.filter((_, i) => i !== index),
+                    }));
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #b0bec5',
+                    background: '#fff',
+                    color: '#546e7a',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    marginBottom: 1,
+                  }}
+                  title="Quitar fecha"
+                >
+                  Quitar
+                </button>
+              </div>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => {
+              setSumForm((prev) => ({
+                ...prev,
+                fechas: [...prev.fechas, prev.fechas[prev.fechas.length - 1] || hoyISOLocal()],
+              }));
+            }}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '2px dashed #00695c',
+              background: 'rgba(0, 105, 92, 0.06)',
+              color: '#00695c',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            + Agregar fecha
+          </button>
+
           <button
             type="submit"
             disabled={guardandoSum}
@@ -3496,7 +3611,11 @@ function App() {
               cursor: guardandoSum ? 'wait' : 'pointer',
             }}
           >
-            {guardandoSum ? 'Guardando...' : 'Guardar reserva'}
+            {guardandoSum
+              ? 'Guardando...'
+              : sumForm.fechas.length > 1
+                ? `Guardar ${sumForm.fechas.length} reservas`
+                : 'Guardar reserva'}
           </button>
         </form>
       </Modal>
