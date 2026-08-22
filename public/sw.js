@@ -1,6 +1,6 @@
 // Service Worker liviano y seguro para CRA en GitHub Pages.
 // Evita cachear rutas inexistentes (p.ej. /static/js/bundle.js) y reduce “código viejo”.
-const CACHE_NAME = 'limos-v1.0.2';
+const CACHE_NAME = 'limos-v1.0.3';
 
 // Instalar Service Worker
 self.addEventListener('install', (event) => {
