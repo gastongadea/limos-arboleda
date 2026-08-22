@@ -20,7 +20,7 @@ Sistema de inscripción de comidas para Limos Arboleda - **Versión Frontend Onl
 
 ## 🚀 Demo en Vivo
 
-**🌐 [Ver aplicación en GitHub Pages](https://gastongadea.github.io/limos-arboleda/)**
+**🌐 [Ver aplicación](https://limos-arboleda.vercel.app/)** (el link de GitHub Pages redirige acá)
 
 ## 📋 Funcionalidades
 
@@ -159,7 +159,7 @@ El proyecto está configurado para desplegarse automáticamente en GitHub Pages:
 
 ### URL de Producción
 ```
-https://gastongadea.github.io/limos-arboleda/
+https://limos-arboleda.vercel.app/
 ```
 
 ## 🔒 Seguridad

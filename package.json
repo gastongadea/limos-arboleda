@@ -21,7 +21,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run update-meta-tags && npm run build",
-    "deploy": "gh-pages -d build",
+    "deploy": "echo \"Frontend en Vercel. GitHub Pages solo redirige (ver redirect-site/).\"",
     "update-meta-tags": "node scripts/update-meta-tags.js"
   },
   "eslintConfig": {
@@ -48,7 +48,7 @@
     "gh-pages": "^6.0.0",
     "node-fetch": "^3.3.2"
   },
-  "homepage": "https://gastongadea.github.io/limos-arboleda/",
+  "homepage": "/",
   "keywords": [
     "comensales",
     "comidas",
